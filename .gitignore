@@ -1,0 +1,11 @@
+node_modules
+PRD.md
+TECH_DESIGN.md
+.env
+.DS_Store
+.vscode/
+dist/
+coverage/
+.idea/
+*.log
+.claude

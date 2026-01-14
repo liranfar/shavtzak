@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* RTL-specific utilities */
+.flip-x {
+  transform: scaleX(-1);
+}
+
+/* Custom scrollbar for RTL */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Grid cell styles */
+.shift-cell {
+  @apply border border-slate-200 rounded-md p-2 min-h-[60px] transition-colors;
+}
+
+.shift-cell:hover {
+  @apply bg-slate-50;
+}
+
+.shift-cell.has-shift {
+  @apply bg-blue-50 border-blue-200;
+}
+
+.shift-cell.conflict {
+  @apply bg-red-50 border-red-300;
+}
+
+.shift-cell.warning {
+  @apply bg-orange-50 border-orange-300;
+}
+
+.shift-cell.disabled {
+  @apply bg-slate-100 opacity-50 cursor-not-allowed;
+}
