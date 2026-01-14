@@ -67,6 +67,7 @@ export const labels = {
   form: {
     name: 'שם',
     personalNumber: 'מספר אישי',
+    phoneNumber: 'טלפון',
     role: 'תפקיד',
     status: 'סטטוס',
     platoon: 'מחלקה',

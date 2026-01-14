@@ -129,10 +129,11 @@ export function getPlatoonFairnessStats(
 
 /**
  * Suggest soldiers for a shift based on fairness and availability
+ * If platoonId is provided, filters to that platoon; otherwise shows all soldiers
  */
 export function suggestSoldiersForShift(
   soldiers: Soldier[],
-  platoonId: string,
+  platoonId: string | null,
   existingShifts: Shift[],
   startTime: Date,
   endTime: Date,
@@ -143,9 +144,12 @@ export function suggestSoldiersForShift(
   hasConflict: boolean;
   hasRestViolation: boolean;
 }> {
-  const platoonSoldiers = soldiers.filter((s) => s.platoonId === platoonId);
+  // If platoonId is null, show all soldiers; otherwise filter by platoon
+  const filteredSoldiers = platoonId
+    ? soldiers.filter((s) => s.platoonId === platoonId)
+    : soldiers;
 
-  return platoonSoldiers
+  return filteredSoldiers
     .map((soldier) => {
       // Check for conflicts
       const hasConflict = existingShifts.some(

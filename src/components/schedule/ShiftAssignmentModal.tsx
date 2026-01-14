@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { X, AlertTriangle, AlertCircle, Clock, User, Users, Check } from 'lucide-react';
 import { format, addMinutes } from 'date-fns';
 import { he } from 'date-fns/locale';
-import type { Mission, Soldier, Shift, Squad } from '../../types/entities';
+import type { Mission, Soldier, Shift, Platoon } from '../../types/entities';
 import { suggestSoldiersForShift } from '../../services/fairnessCalculator';
 import { validateShiftAssignment } from '../../services/validationService';
 import { labels } from '../../utils/translations';
@@ -26,7 +26,7 @@ interface ShiftAssignmentModalProps {
   mission: Mission;
   startTime: Date;
   soldiers: Soldier[];
-  squads: Squad[];
+  platoons: Platoon[];
   existingShifts: Shift[];
   onAssign: (soldierIds: string[], startTime: Date, endTime: Date) => void;
   onClose: () => void;
@@ -36,7 +36,7 @@ export function ShiftAssignmentModal({
   mission,
   startTime: initialStartTime,
   soldiers,
-  squads,
+  platoons,
   existingShifts,
   onAssign,
   onClose,
@@ -47,28 +47,28 @@ export function ShiftAssignmentModal({
   const startTime = initialStartTime;
   const endTime = addMinutes(startTime, durationMinutes);
 
-  // Get suggested soldiers sorted by fairness
+  // Get suggested soldiers sorted by fairness (show all platoons)
   const suggestions = useMemo(() => {
     return suggestSoldiersForShift(
       soldiers,
-      mission.platoonId,
+      null, // Show all platoons, not just mission's platoon
       existingShifts,
       startTime,
       endTime,
       50 // Show all
     );
-  }, [soldiers, mission.platoonId, existingShifts, startTime, endTime]);
+  }, [soldiers, existingShifts, startTime, endTime]);
 
-  // Group soldiers by squad
-  const soldiersBySquad = useMemo(() => {
+  // Group soldiers by platoon
+  const soldiersByPlatoon = useMemo(() => {
     const grouped = new Map<string, typeof suggestions>();
 
     for (const suggestion of suggestions) {
-      const squadId = suggestion.soldier.squadId;
-      if (!grouped.has(squadId)) {
-        grouped.set(squadId, []);
+      const platoonId = suggestion.soldier.platoonId;
+      if (!grouped.has(platoonId)) {
+        grouped.set(platoonId, []);
       }
-      grouped.get(squadId)!.push(suggestion);
+      grouped.get(platoonId)!.push(suggestion);
     }
 
     return grouped;
@@ -134,9 +134,9 @@ export function ShiftAssignmentModal({
   const canAssign = selectedSoldierIds.size > 0 &&
     Array.from(selectedSoldierIds).some(id => validationResults.get(id)?.isValid !== false);
 
-  const getSquadName = (squadId: string) => {
-    const squad = squads.find(s => s.id === squadId);
-    return squad?.name || 'ללא כיתה';
+  const getPlatoonName = (platoonId: string) => {
+    const platoon = platoons.find(p => p.id === platoonId);
+    return platoon?.name || 'ללא מחלקה';
   };
 
   return (
@@ -201,37 +201,41 @@ export function ShiftAssignmentModal({
           </div>
         </div>
 
-        {/* Soldier list grouped by squad */}
+        {/* Soldier list grouped by platoon */}
         <div className="flex-1 overflow-y-auto p-4">
-          {Array.from(soldiersBySquad.entries()).map(([squadId, squadSoldiers]) => (
-            <div key={squadId} className="mb-4">
+          {Array.from(soldiersByPlatoon.entries()).map(([platoonId, platoonSoldiers]) => (
+            <div key={platoonId} className="mb-4">
               <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
                 <Users className="w-4 h-4" />
-                {getSquadName(squadId)}
-                <span className="text-slate-400 font-normal">({squadSoldiers.length})</span>
+                {getPlatoonName(platoonId)}
+                <span className="text-slate-400 font-normal">({platoonSoldiers.length})</span>
               </h4>
               <div className="space-y-1">
-                {squadSoldiers.map(({ soldier, score, hasConflict, hasRestViolation }) => {
+                {platoonSoldiers.map(({ soldier, score, hasConflict, hasRestViolation }) => {
                   const isSelected = selectedSoldierIds.has(soldier.id);
+                  const isUnavailable = soldier.status !== 'available';
+                  const isDisabled = hasConflict || isUnavailable;
 
                   return (
                     <button
                       key={soldier.id}
-                      onClick={() => toggleSoldier(soldier.id, hasConflict)}
-                      disabled={hasConflict}
+                      onClick={() => toggleSoldier(soldier.id, isDisabled)}
+                      disabled={isDisabled}
                       className={clsx(
                         'w-full flex items-center gap-3 p-2 rounded-lg border text-right transition-colors',
                         isSelected
                           ? 'border-blue-500 bg-blue-50'
                           : 'border-slate-200 hover:bg-slate-50',
-                        hasConflict && 'opacity-50 cursor-not-allowed bg-red-50 border-red-200'
+                        hasConflict && 'opacity-50 cursor-not-allowed bg-red-50 border-red-200',
+                        isUnavailable && !hasConflict && 'opacity-50 cursor-not-allowed bg-slate-100 border-slate-300'
                       )}
                     >
                       {/* Checkbox */}
                       <div className={clsx(
                         'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0',
                         isSelected ? 'bg-blue-500 border-blue-500' : 'border-slate-300',
-                        hasConflict && 'border-red-300 bg-red-100'
+                        hasConflict && 'border-red-300 bg-red-100',
+                        isUnavailable && !hasConflict && 'border-slate-400 bg-slate-200'
                       )}>
                         {isSelected && <Check className="w-3 h-3 text-white" />}
                       </div>
@@ -255,7 +259,7 @@ export function ShiftAssignmentModal({
                               תפוס
                             </span>
                           )}
-                          {hasRestViolation && !hasConflict && (
+                          {hasRestViolation && !hasConflict && !isUnavailable && (
                             <span className="flex items-center gap-1 text-xs text-orange-600">
                               <AlertTriangle className="w-3 h-3" />
                               מנוחה

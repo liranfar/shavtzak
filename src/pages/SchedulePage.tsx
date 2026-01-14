@@ -36,7 +36,7 @@ export function SchedulePage() {
   const { missions, loadMissions } = useMissionStore();
   const { shifts, selectedDate, setSelectedDate, loadShifts, addShift, deleteShift } = useScheduleStore();
   const { soldiers, loadSoldiers, updateFairnessScore } = useSoldierStore();
-  const { squads, currentPlatoonId, loadPlatoons, loadSquads } = usePlatoonStore();
+  const { platoons, currentPlatoonId, loadPlatoons, loadSquads } = usePlatoonStore();
 
   const [modalData, setModalData] = useState<{
     mission: Mission;
@@ -74,8 +74,8 @@ export function SchedulePage() {
   const handleNextDay = () => setSelectedDate(addDays(selectedDate, 1));
   const handleToday = () => setSelectedDate(new Date());
 
-  // Get shifts that START within this hour
-  const getShiftsStartingInHour = (missionId: string, hour: number) => {
+  // Get shifts that START at this exact time slot (hour:minute)
+  const getShiftsStartingAtSlot = (missionId: string, hour: number, minute: number) => {
     return shifts.filter((s) => {
       const shiftStart = new Date(s.startTime);
       const shiftDate = new Date(selectedDate);
@@ -84,25 +84,38 @@ export function SchedulePage() {
         shiftStart.getDate() === shiftDate.getDate() &&
         shiftStart.getMonth() === shiftDate.getMonth() &&
         shiftStart.getFullYear() === shiftDate.getFullYear() &&
-        shiftStart.getHours() === hour
+        shiftStart.getHours() === hour &&
+        shiftStart.getMinutes() === minute
       );
     });
   };
 
-  // Get all shifts that COVER this hour (for showing continuation)
-  const getShiftsCoveringHour = (missionId: string, hour: number) => {
-    const slotTime = setHours(startOfDay(selectedDate), hour);
+  // Get all shifts that COVER this time slot (for showing continuation)
+  // This includes overnight shifts that started on the previous day
+  const getShiftsCoveringSlot = (missionId: string, hour: number, minute: number) => {
+    const slotTime = setMinutes(setHours(startOfDay(selectedDate), hour), minute);
     return shifts.filter((s) => {
       const shiftStart = new Date(s.startTime);
       const shiftEnd = new Date(s.endTime);
-      const shiftDate = new Date(selectedDate);
       return (
         s.missionId === missionId &&
-        shiftStart.getDate() === shiftDate.getDate() &&
-        shiftStart.getMonth() === shiftDate.getMonth() &&
-        shiftStart.getFullYear() === shiftDate.getFullYear() &&
         shiftStart <= slotTime &&
         shiftEnd > slotTime
+      );
+    });
+  };
+
+  // Get overnight shifts that started on a previous day but continue into this day
+  // These should display their card at 00:00
+  const getOvernightShifts = (missionId: string) => {
+    const dayStart = startOfDay(selectedDate);
+    return shifts.filter((s) => {
+      const shiftStart = new Date(s.startTime);
+      const shiftEnd = new Date(s.endTime);
+      return (
+        s.missionId === missionId &&
+        shiftStart < dayStart &&
+        shiftEnd > dayStart
       );
     });
   };
@@ -112,8 +125,8 @@ export function SchedulePage() {
     return soldier?.name || 'לא ידוע';
   };
 
-  const handleCellClick = (mission: Mission, hour: number) => {
-    const startTime = setHours(startOfDay(selectedDate), hour);
+  const handleCellClick = (mission: Mission, hour: number, minute: number) => {
+    const startTime = setMinutes(setHours(startOfDay(selectedDate), hour), minute);
     setModalData({ mission, startTime });
   };
 
@@ -237,64 +250,11 @@ export function SchedulePage() {
           </div>
         </div>
 
-        {/* Main content - sidebar on top for better visibility */}
-        <div className="flex flex-col lg:flex-row gap-4">
-          {/* Available Soldiers - on top on mobile, side on desktop */}
-          <div className={clsx(
-            'bg-white rounded-xl border border-slate-200 p-4',
-            'lg:w-64 lg:shrink-0 lg:order-2'
-          )}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-slate-600" />
-                <h3 className="font-semibold text-slate-900">חיילים זמינים</h3>
-                <span className="text-sm text-slate-500">({availableSoldiers.length})</span>
-              </div>
-              <button
-                onClick={() => setShowSidebar(!showSidebar)}
-                className="lg:hidden text-sm text-blue-600"
-              >
-                {showSidebar ? 'הסתר' : 'הצג'}
-              </button>
-            </div>
-            <div className={clsx(
-              'space-y-2 max-h-[200px] lg:max-h-[calc(100vh-400px)] overflow-y-auto',
-              !showSidebar && 'hidden lg:block'
-            )}>
-              {availableSoldiers
-                .sort((a, b) => a.fairnessScore - b.fairnessScore)
-                .map((soldier) => (
-                  <div
-                    key={soldier.id}
-                    className="flex items-center justify-between p-2 bg-slate-50 rounded-lg"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">{soldier.name}</p>
-                      <p className="text-xs text-slate-500">
-                        ציון: {soldier.fairnessScore.toFixed(1)}
-                      </p>
-                    </div>
-                    <span
-                      className={clsx(
-                        'px-1.5 py-0.5 rounded text-xs font-medium',
-                        STATUS_COLORS[soldier.status]
-                      )}
-                    >
-                      {labels.status[soldier.status]}
-                    </span>
-                  </div>
-                ))}
-              {availableSoldiers.length === 0 && (
-                <p className="text-sm text-slate-500 text-center py-4">
-                  אין חיילים זמינים
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Schedule Grid */}
-          <div className="flex-1 bg-white rounded-xl border border-slate-200 overflow-hidden lg:order-1">
-            <div className="overflow-x-auto">
+        {/* Main content - schedule grid on top, available soldiers at bottom */}
+        <div className="flex flex-col gap-4">
+          {/* Schedule Grid - with inner scrolling */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="max-h-[calc(100vh-380px)] overflow-auto">
               <table className="w-full">
                 <thead>
                   <tr className="bg-slate-50">
@@ -303,7 +263,7 @@ export function SchedulePage() {
                     </th>
                     {TIME_SLOTS.map((slot) => (
                       <th
-                        key={slot.hour}
+                        key={slot.label}
                         className="px-1 py-2 text-center text-xs font-medium text-slate-600 border-l border-slate-200 min-w-[70px]"
                       >
                         {slot.label}
@@ -324,24 +284,31 @@ export function SchedulePage() {
                           </div>
                         </td>
                         {TIME_SLOTS.map((slot) => {
-                          const shiftsStartingHere = getShiftsStartingInHour(mission.id, slot.hour);
-                          const shiftsCoveringSlot = getShiftsCoveringHour(mission.id, slot.hour);
-                          const hasShifts = shiftsCoveringSlot.length > 0;
+                          const shiftsStartingHere = getShiftsStartingAtSlot(mission.id, slot.hour, slot.minute);
+                          // At 00:00, also include overnight shifts from previous day
+                          const overnightShifts = slot.hour === 0 && slot.minute === 0
+                            ? getOvernightShifts(mission.id)
+                            : [];
+                          const allShiftsToShow = [...shiftsStartingHere, ...overnightShifts];
+
+                          const shiftsCoveringThisSlot = getShiftsCoveringSlot(mission.id, slot.hour, slot.minute);
+                          const hasShifts = shiftsCoveringThisSlot.length > 0;
 
                           // Check if this slot is covered by a shift that started earlier (continuation)
-                          const isContinuation = hasShifts && shiftsStartingHere.length === 0;
+                          // For 00:00 with overnight shifts, don't show as continuation since we show the card
+                          const isContinuation = hasShifts && allShiftsToShow.length === 0;
 
                           return (
                             <td
-                              key={slot.hour}
+                              key={slot.label}
                               className={clsx(
                                 'px-1 py-1 border-l border-slate-200 align-top',
                                 isContinuation && 'bg-blue-50/50'
                               )}
                             >
                               <div className="min-h-[60px] space-y-1">
-                                {/* Show shifts starting at this hour */}
-                                {shiftsStartingHere.map((shift) => (
+                                {/* Show shifts starting at this slot (or continuing from previous day at 00:00) */}
+                                {allShiftsToShow.map((shift) => (
                                   <ShiftCell
                                     key={shift.id}
                                     shift={shift}
@@ -355,7 +322,7 @@ export function SchedulePage() {
 
                                 {/* Add button - always visible for multiple assignments */}
                                 <button
-                                  onClick={() => handleCellClick(mission, slot.hour)}
+                                  onClick={() => handleCellClick(mission, slot.hour, slot.minute)}
                                   className={clsx(
                                     'w-full flex items-center justify-center rounded transition-colors',
                                     hasShifts
@@ -388,6 +355,55 @@ export function SchedulePage() {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Available Soldiers - at bottom for visibility while scrolling timeline */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-slate-600" />
+                <h3 className="font-semibold text-slate-900">חיילים זמינים</h3>
+                <span className="text-sm text-slate-500">({availableSoldiers.length})</span>
+              </div>
+              <button
+                onClick={() => setShowSidebar(!showSidebar)}
+                className="text-sm text-blue-600"
+              >
+                {showSidebar ? 'הסתר' : 'הצג'}
+              </button>
+            </div>
+            {showSidebar && (
+              <div className="flex flex-wrap gap-2">
+                {availableSoldiers
+                  .sort((a, b) => a.fairnessScore - b.fairnessScore)
+                  .map((soldier) => (
+                    <div
+                      key={soldier.id}
+                      className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-slate-900">{soldier.name}</p>
+                        <p className="text-xs text-slate-500">
+                          ציון: {soldier.fairnessScore.toFixed(1)}
+                        </p>
+                      </div>
+                      <span
+                        className={clsx(
+                          'px-1.5 py-0.5 rounded text-xs font-medium',
+                          STATUS_COLORS[soldier.status]
+                        )}
+                      >
+                        {labels.status[soldier.status]}
+                      </span>
+                    </div>
+                  ))}
+                {availableSoldiers.length === 0 && (
+                  <p className="text-sm text-slate-500 text-center py-2 w-full">
+                    אין חיילים זמינים
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -427,7 +443,7 @@ export function SchedulePage() {
           mission={modalData.mission}
           startTime={modalData.startTime}
           soldiers={soldiers}
-          squads={squads}
+          platoons={platoons}
           existingShifts={shifts}
           onAssign={handleAssignSoldiers}
           onClose={() => setModalData(null)}

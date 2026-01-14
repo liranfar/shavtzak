@@ -13,7 +13,7 @@ export function Layout() {
       <div className="flex">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        <main className="flex-1 p-4 lg:p-6">
+        <main className="flex-1 p-4 lg:p-6 overflow-hidden min-w-0">
           <Outlet />
         </main>
       </div>

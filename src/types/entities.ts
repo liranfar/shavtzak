@@ -9,13 +9,21 @@ export interface Soldier {
   id: string;
   name: string;
   personalNumber: string; // מספר אישי
+  phoneNumber: string; // מספר טלפון
   role: SoldierRole;
   status: SoldierStatus;
   platoonId: string;
   squadId: string;
+  certificateIds: string[]; // הסמכות
   fairnessScore: number; // cumulative weekly score
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface Certificate {
+  id: string;
+  name: string; // e.g., "קלע", "חובש", "נהג"
+  createdAt: Date;
 }
 
 export interface Mission {
