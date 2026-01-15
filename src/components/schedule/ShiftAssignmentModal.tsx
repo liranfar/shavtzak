@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { X, AlertTriangle, AlertCircle, Clock, User, Users, Check, Award, Info } from 'lucide-react';
+import { X, AlertTriangle, AlertCircle, Clock, User, Users, Check, Award, Info, Search } from 'lucide-react';
 import { format, addMinutes } from 'date-fns';
 import { he } from 'date-fns/locale';
 import type { Mission, Soldier, Shift, Platoon, Certificate } from '../../types/entities';
@@ -45,6 +45,7 @@ export function ShiftAssignmentModal({
 }: ShiftAssignmentModalProps) {
   const [selectedSoldierIds, setSelectedSoldierIds] = useState<Set<string>>(new Set());
   const [durationMinutes, setDurationMinutes] = useState(120); // Default 2 hours
+  const [searchTerm, setSearchTerm] = useState('');
 
   const startTime = initialStartTime;
   const endTime = addMinutes(startTime, durationMinutes);
@@ -61,20 +62,35 @@ export function ShiftAssignmentModal({
     );
   }, [soldiers, existingShifts, startTime, endTime]);
 
-  // Group soldiers by platoon
-  const soldiersByPlatoon = useMemo(() => {
-    const grouped = new Map<string, typeof suggestions>();
+  // Filter suggestions by search term
+  const filteredSuggestions = useMemo(() => {
+    if (!searchTerm.trim()) return suggestions;
+    const term = searchTerm.toLowerCase();
+    return suggestions.filter(({ soldier }) =>
+      soldier.name.toLowerCase().includes(term) ||
+      soldier.personalNumber.includes(term)
+    );
+  }, [suggestions, searchTerm]);
 
-    for (const suggestion of suggestions) {
+  // Group soldiers by platoon (consolidate non-existent platoons into one group)
+  const soldiersByPlatoon = useMemo(() => {
+    const grouped = new Map<string, typeof filteredSuggestions>();
+    const NO_PLATOON_KEY = '__no_platoon__';
+
+    for (const suggestion of filteredSuggestions) {
       const platoonId = suggestion.soldier.platoonId;
-      if (!grouped.has(platoonId)) {
-        grouped.set(platoonId, []);
+      // Check if platoon exists, if not group under "no platoon"
+      const platoonExists = platoons.some(p => p.id === platoonId);
+      const groupKey = platoonExists ? platoonId : NO_PLATOON_KEY;
+
+      if (!grouped.has(groupKey)) {
+        grouped.set(groupKey, []);
       }
-      grouped.get(platoonId)!.push(suggestion);
+      grouped.get(groupKey)!.push(suggestion);
     }
 
     return grouped;
-  }, [suggestions]);
+  }, [filteredSuggestions, platoons]);
 
   // Get validation results for selected soldiers
   const validationResults = useMemo(() => {
@@ -137,6 +153,7 @@ export function ShiftAssignmentModal({
     Array.from(selectedSoldierIds).some(id => validationResults.get(id)?.isValid !== false);
 
   const getPlatoonName = (platoonId: string) => {
+    if (platoonId === '__no_platoon__') return 'ללא מחלקה';
     const platoon = platoons.find(p => p.id === platoonId);
     return platoon?.name || 'ללא מחלקה';
   };
@@ -253,6 +270,20 @@ export function ShiftAssignmentModal({
               </div>
             </div>
           )}
+        </div>
+
+        {/* Search bar */}
+        <div className="px-4 pt-3">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="חיפוש לפי שם או מספר אישי..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pr-10 pl-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
 
         {/* Soldier list grouped by platoon */}

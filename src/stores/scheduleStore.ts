@@ -17,6 +17,7 @@ interface ScheduleState {
   deleteShift: (id: string) => Promise<void>;
   updateShiftStatus: (id: string, status: ShiftStatus) => Promise<void>;
   setSelectedDate: (date: Date) => void;
+  cleanupOrphanedShifts: () => Promise<number>;
 
   // Queries
   getShiftsForMission: (missionId: string, date: Date) => Shift[];
@@ -34,6 +35,34 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   loadShifts: async () => {
     set({ isLoading: true, error: null });
     try {
+      // First, cleanup orphaned shifts (from deleted missions/soldiers/platoons)
+      const missions = await db.missions.toArray();
+      const validMissionIds = new Set(missions.map((m) => m.id));
+      const soldiers = await db.soldiers.toArray();
+      const validSoldierIds = new Set(soldiers.map((s) => s.id));
+      const platoons = await db.platoons.toArray();
+      const validPlatoonIds = new Set(platoons.map((p) => p.id));
+
+      // Also track missions that belong to non-existent platoons
+      const missionsWithValidPlatoons = new Set(
+        missions.filter((m) => validPlatoonIds.has(m.platoonId)).map((m) => m.id)
+      );
+
+      const allShifts = await db.shifts.toArray();
+      const orphanedShiftIds = allShifts
+        .filter((s) =>
+          !validMissionIds.has(s.missionId) ||
+          !validSoldierIds.has(s.soldierId) ||
+          !missionsWithValidPlatoons.has(s.missionId)
+        )
+        .map((s) => s.id);
+
+      if (orphanedShiftIds.length > 0) {
+        console.log(`Cleaning up ${orphanedShiftIds.length} orphaned shifts`);
+        await db.shifts.bulkDelete(orphanedShiftIds);
+      }
+
+      // Load remaining valid shifts
       const shifts = await db.shifts.toArray();
       // Convert date strings back to Date objects
       const parsedShifts = shifts.map((s) => ({
@@ -166,5 +195,47 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
         { start: startTime, end: endTime }
       )
     );
+  },
+
+  cleanupOrphanedShifts: async () => {
+    try {
+      // Get all valid entities
+      const missions = await db.missions.toArray();
+      const validMissionIds = new Set(missions.map((m) => m.id));
+      const soldiers = await db.soldiers.toArray();
+      const validSoldierIds = new Set(soldiers.map((s) => s.id));
+      const platoons = await db.platoons.toArray();
+      const validPlatoonIds = new Set(platoons.map((p) => p.id));
+
+      // Missions with valid platoons
+      const missionsWithValidPlatoons = new Set(
+        missions.filter((m) => validPlatoonIds.has(m.platoonId)).map((m) => m.id)
+      );
+
+      // Find orphaned shifts
+      const allShifts = await db.shifts.toArray();
+      const orphanedShiftIds = allShifts
+        .filter((s) =>
+          !validMissionIds.has(s.missionId) ||
+          !validSoldierIds.has(s.soldierId) ||
+          !missionsWithValidPlatoons.has(s.missionId)
+        )
+        .map((s) => s.id);
+
+      // Delete orphaned shifts
+      if (orphanedShiftIds.length > 0) {
+        console.log(`Cleaning up ${orphanedShiftIds.length} orphaned shifts`);
+        await db.shifts.bulkDelete(orphanedShiftIds);
+        // Update local state
+        set((state) => ({
+          shifts: state.shifts.filter((s) => !orphanedShiftIds.includes(s.id)),
+        }));
+      }
+
+      return orphanedShiftIds.length;
+    } catch (error) {
+      console.error('Failed to cleanup orphaned shifts:', error);
+      return 0;
+    }
   },
 }));

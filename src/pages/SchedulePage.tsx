@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { ChevronRight, ChevronLeft, Users, Plus } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Plus } from 'lucide-react';
 import { format, addDays, subDays, setHours, setMinutes, startOfDay } from 'date-fns';
 import { he } from 'date-fns/locale';
 import {
@@ -22,7 +22,6 @@ import { SoldierDragOverlay } from '../components/schedule/SoldierDragOverlay';
 import { validateDaySchedule } from '../services/validationService';
 import { calculateShiftScore } from '../services/fairnessCalculator';
 import { labels } from '../utils/translations';
-import { STATUS_COLORS } from '../utils/constants';
 import type { Mission, Shift } from '../types/entities';
 import clsx from 'clsx';
 
@@ -44,7 +43,6 @@ export function SchedulePage() {
     startTime: Date;
   } | null>(null);
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
-  const [showSidebar, setShowSidebar] = useState(true);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -228,11 +226,6 @@ export function SchedulePage() {
     }
   };
 
-  // Get available soldiers for sidebar
-  const availableSoldiers = soldiers.filter(
-    (s) => s.status === 'available' && (!currentPlatoonId || s.platoonId === currentPlatoonId)
-  );
-
   return (
     <DndContext
       sensors={sensors}
@@ -410,54 +403,6 @@ export function SchedulePage() {
             </div>
           </div>
 
-          {/* Available Soldiers - at bottom for visibility while scrolling timeline */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-slate-600" />
-                <h3 className="font-semibold text-slate-900">חיילים זמינים</h3>
-                <span className="text-sm text-slate-500">({availableSoldiers.length})</span>
-              </div>
-              <button
-                onClick={() => setShowSidebar(!showSidebar)}
-                className="text-sm text-blue-600"
-              >
-                {showSidebar ? 'הסתר' : 'הצג'}
-              </button>
-            </div>
-            {showSidebar && (
-              <div className="flex flex-wrap gap-2">
-                {availableSoldiers
-                  .sort((a, b) => a.fairnessScore - b.fairnessScore)
-                  .map((soldier) => (
-                    <div
-                      key={soldier.id}
-                      className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-slate-900">{soldier.name}</p>
-                        <p className="text-xs text-slate-500">
-                          ציון: {soldier.fairnessScore.toFixed(1)}
-                        </p>
-                      </div>
-                      <span
-                        className={clsx(
-                          'px-1.5 py-0.5 rounded text-xs font-medium',
-                          STATUS_COLORS[soldier.status]
-                        )}
-                      >
-                        {labels.status[soldier.status]}
-                      </span>
-                    </div>
-                  ))}
-                {availableSoldiers.length === 0 && (
-                  <p className="text-sm text-slate-500 text-center py-2 w-full">
-                    אין חיילים זמינים
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Legend */}
