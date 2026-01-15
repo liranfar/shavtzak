@@ -35,25 +35,17 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   loadShifts: async () => {
     set({ isLoading: true, error: null });
     try {
-      // First, cleanup orphaned shifts (from deleted missions/soldiers/platoons)
+      // First, cleanup orphaned shifts (from deleted missions/soldiers only)
       const missions = await db.missions.toArray();
       const validMissionIds = new Set(missions.map((m) => m.id));
       const soldiers = await db.soldiers.toArray();
       const validSoldierIds = new Set(soldiers.map((s) => s.id));
-      const platoons = await db.platoons.toArray();
-      const validPlatoonIds = new Set(platoons.map((p) => p.id));
-
-      // Also track missions that belong to non-existent platoons
-      const missionsWithValidPlatoons = new Set(
-        missions.filter((m) => validPlatoonIds.has(m.platoonId)).map((m) => m.id)
-      );
 
       const allShifts = await db.shifts.toArray();
       const orphanedShiftIds = allShifts
         .filter((s) =>
           !validMissionIds.has(s.missionId) ||
-          !validSoldierIds.has(s.soldierId) ||
-          !missionsWithValidPlatoons.has(s.missionId)
+          !validSoldierIds.has(s.soldierId)
         )
         .map((s) => s.id);
 
@@ -204,21 +196,13 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       const validMissionIds = new Set(missions.map((m) => m.id));
       const soldiers = await db.soldiers.toArray();
       const validSoldierIds = new Set(soldiers.map((s) => s.id));
-      const platoons = await db.platoons.toArray();
-      const validPlatoonIds = new Set(platoons.map((p) => p.id));
 
-      // Missions with valid platoons
-      const missionsWithValidPlatoons = new Set(
-        missions.filter((m) => validPlatoonIds.has(m.platoonId)).map((m) => m.id)
-      );
-
-      // Find orphaned shifts
+      // Find orphaned shifts (only check mission and soldier existence)
       const allShifts = await db.shifts.toArray();
       const orphanedShiftIds = allShifts
         .filter((s) =>
           !validMissionIds.has(s.missionId) ||
-          !validSoldierIds.has(s.soldierId) ||
-          !missionsWithValidPlatoons.has(s.missionId)
+          !validSoldierIds.has(s.soldierId)
         )
         .map((s) => s.id);
 
