@@ -30,6 +30,8 @@ export function SoldiersPage() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<SoldierStatus | 'all'>('all');
+  const [platoonFilter, setPlatoonFilter] = useState<string>('all');
+  const [certificateFilter, setCertificateFilter] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSoldier, setEditingSoldier] = useState<Soldier | null>(null);
   const [selectedCertificateIds, setSelectedCertificateIds] = useState<string[]>([]);
@@ -50,16 +52,31 @@ export function SoldiersPage() {
   }, [loadPlatoons, loadSquads, loadCertificates, loadSoldiers]);
 
   const filteredSoldiers = soldiers.filter((soldier) => {
+    // Search by name, personal number, or phone
     const matchesSearch =
       soldier.name.includes(searchTerm) ||
-      soldier.personalNumber.includes(searchTerm);
+      soldier.personalNumber.includes(searchTerm) ||
+      soldier.phoneNumber?.includes(searchTerm);
+
+    // Status filter
     const matchesStatus =
       statusFilter === 'all' || soldier.status === statusFilter;
-    // Show soldier if: no platoon filter, matches current platoon, or soldier has no valid platoon (orphaned)
+
+    // Platoon filter - use explicit filter or fall back to global currentPlatoonId
     const soldierPlatoonExists = platoons.some(p => p.id === soldier.platoonId);
+    const effectivePlatoonFilter = platoonFilter !== 'all' ? platoonFilter : currentPlatoonId;
     const matchesPlatoon =
-      !currentPlatoonId || soldier.platoonId === currentPlatoonId || !soldierPlatoonExists;
-    return matchesSearch && matchesStatus && matchesPlatoon;
+      !effectivePlatoonFilter ||
+      soldier.platoonId === effectivePlatoonFilter ||
+      (platoonFilter === 'none' && !soldierPlatoonExists);
+
+    // Certificate filter
+    const matchesCertificate =
+      certificateFilter === 'all' ||
+      (certificateFilter === 'none' && (!soldier.certificateIds || soldier.certificateIds.length === 0)) ||
+      (soldier.certificateIds && soldier.certificateIds.includes(certificateFilter));
+
+    return matchesSearch && matchesStatus && matchesPlatoon && matchesCertificate;
   });
 
   const handleAddSoldier = () => {
@@ -146,29 +163,77 @@ export function SoldiersPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder={labels.actions.search}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pr-10 pl-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+      <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="חיפוש לפי שם, מ.א או טלפון..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pr-10 pl-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as SoldierStatus | 'all')}
+            className="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">סטטוס - הכל</option>
+            <option value="available">{labels.status.available}</option>
+            <option value="home">{labels.status.home}</option>
+            <option value="task_locked">{labels.status.task_locked}</option>
+            <option value="sick">{labels.status.sick}</option>
+          </select>
+
+          <select
+            value={platoonFilter}
+            onChange={(e) => setPlatoonFilter(e.target.value)}
+            className="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">מחלקה - הכל</option>
+            <option value="none">ללא מחלקה</option>
+            {platoons.map((platoon) => (
+              <option key={platoon.id} value={platoon.id}>
+                {platoon.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={certificateFilter}
+            onChange={(e) => setCertificateFilter(e.target.value)}
+            className="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">הסמכה - הכל</option>
+            <option value="none">ללא הסמכות</option>
+            {certificates.map((cert) => (
+              <option key={cert.id} value={cert.id}>
+                {cert.name}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as SoldierStatus | 'all')}
-          className="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="all">{labels.actions.filter} - הכל</option>
-          <option value="available">{labels.status.available}</option>
-          <option value="home">{labels.status.home}</option>
-          <option value="task_locked">{labels.status.task_locked}</option>
-          <option value="sick">{labels.status.sick}</option>
-        </select>
+        {/* Active filters summary */}
+        {(statusFilter !== 'all' || platoonFilter !== 'all' || certificateFilter !== 'all' || searchTerm) && (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-slate-500">מציג {filteredSoldiers.length} מתוך {soldiers.length} חיילים</span>
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setStatusFilter('all');
+                setPlatoonFilter('all');
+                setCertificateFilter('all');
+              }}
+              className="text-blue-600 hover:text-blue-700"
+            >
+              נקה סינון
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Soldiers Table */}
