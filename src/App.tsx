@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
 import { DashboardPage } from './pages/DashboardPage';
 import { SchedulePage } from './pages/SchedulePage';
+import { ViewPage } from './pages/ViewPage';
 import { SummaryPage } from './pages/SummaryPage';
 import { SoldiersPage } from './pages/SoldiersPage';
 import { MissionsPage } from './pages/MissionsPage';
@@ -55,6 +56,7 @@ function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<DashboardPage />} />
           <Route path="schedule" element={<SchedulePage />} />
+          <Route path="view" element={<ViewPage />} />
           <Route path="summary" element={<SummaryPage />} />
           <Route path="soldiers" element={<SoldiersPage />} />
           <Route path="missions" element={<MissionsPage />} />
