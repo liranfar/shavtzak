@@ -62,13 +62,12 @@ export function SoldiersPage() {
     const matchesStatus =
       statusFilter === 'all' || soldier.status === statusFilter;
 
-    // Platoon filter - use explicit filter or fall back to global currentPlatoonId
+    // Platoon filter - explicit filter only, ignore global currentPlatoonId
     const soldierPlatoonExists = platoons.some(p => p.id === soldier.platoonId);
-    const effectivePlatoonFilter = platoonFilter !== 'all' ? platoonFilter : currentPlatoonId;
     const matchesPlatoon =
-      !effectivePlatoonFilter ||
-      soldier.platoonId === effectivePlatoonFilter ||
-      (platoonFilter === 'none' && !soldierPlatoonExists);
+      platoonFilter === 'all' ||
+      (platoonFilter === 'none' && !soldierPlatoonExists) ||
+      soldier.platoonId === platoonFilter;
 
     // Certificate filter
     const matchesCertificate =
