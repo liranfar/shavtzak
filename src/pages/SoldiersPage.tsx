@@ -456,14 +456,14 @@ export function SoldiersPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  {labels.form.squad}
+                  {labels.form.squad} <span className="text-slate-400 font-normal">(אופציונלי)</span>
                 </label>
                 <select
                   name="squadId"
-                  required
-                  defaultValue={editingSoldier?.squadId}
+                  defaultValue={editingSoldier?.squadId || ''}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
+                  <option value="">ללא כיתה</option>
                   {squads.map((squad) => (
                     <option key={squad.id} value={squad.id}>
                       {squad.name}
