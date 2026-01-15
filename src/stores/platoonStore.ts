@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { db, generateId } from '../db/database';
+import { db, generateId, generatePlatoonColor } from '../db/database';
 import type { Platoon, Squad, Certificate } from '../types/entities';
 
 interface PlatoonState {
@@ -92,6 +92,7 @@ export const usePlatoonStore = create<PlatoonState>((set, get) => ({
       id: generateId(),
       name,
       companyId: 'company-1',
+      color: generatePlatoonColor(),
       createdAt: new Date(),
     };
     await db.platoons.add(platoon);

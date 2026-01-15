@@ -53,6 +53,51 @@ class ShavtzakDatabase extends Dexie {
         }
       });
     });
+
+    // Version 4: Add color to platoons
+    this.version(4).stores({
+      soldiers: 'id, platoonId, squadId, status, name',
+      missions: 'id, platoonId, type, name',
+      shifts: 'id, missionId, soldierId, startTime, endTime, status',
+      platoons: 'id, companyId, name',
+      squads: 'id, platoonId, name',
+      certificates: 'id, name',
+    }).upgrade(tx => {
+      // Add color field to existing platoons with distinguishable colors
+      const platoonColors = [
+        '#3B82F6', // blue
+        '#10B981', // emerald
+        '#F59E0B', // amber
+        '#EF4444', // red
+        '#8B5CF6', // violet
+        '#EC4899', // pink
+        '#06B6D4', // cyan
+        '#84CC16', // lime
+      ];
+      let colorIndex = 0;
+      return tx.table('platoons').toCollection().modify(platoon => {
+        if (!platoon.color) {
+          platoon.color = platoonColors[colorIndex % platoonColors.length];
+          colorIndex++;
+        }
+      });
+    });
+
+    // Version 5: Add requiredCertificateIds to missions
+    this.version(5).stores({
+      soldiers: 'id, platoonId, squadId, status, name',
+      missions: 'id, platoonId, type, name',
+      shifts: 'id, missionId, soldierId, startTime, endTime, status',
+      platoons: 'id, companyId, name',
+      squads: 'id, platoonId, name',
+      certificates: 'id, name',
+    }).upgrade(tx => {
+      return tx.table('missions').toCollection().modify(mission => {
+        if (!mission.requiredCertificateIds) {
+          mission.requiredCertificateIds = [];
+        }
+      });
+    });
   }
 }
 
@@ -62,6 +107,25 @@ export const db = new ShavtzakDatabase();
 // Helper to generate unique IDs
 export function generateId(): string {
   return crypto.randomUUID();
+}
+
+// Distinguishable colors for platoons
+const PLATOON_COLORS = [
+  '#3B82F6', // blue
+  '#10B981', // emerald
+  '#F59E0B', // amber
+  '#EF4444', // red
+  '#8B5CF6', // violet
+  '#EC4899', // pink
+  '#06B6D4', // cyan
+  '#84CC16', // lime
+  '#F97316', // orange
+  '#14B8A6', // teal
+];
+
+// Generate a random platoon color
+export function generatePlatoonColor(): string {
+  return PLATOON_COLORS[Math.floor(Math.random() * PLATOON_COLORS.length)];
 }
 
 // Seed data for initial setup
@@ -81,6 +145,7 @@ export async function seedDatabase(): Promise<void> {
     id: platoonId,
     name: 'מחלקה א׳',
     companyId: 'company-1',
+    color: '#3B82F6', // blue
     createdAt: now,
   });
 
@@ -125,9 +190,9 @@ export async function seedDatabase(): Promise<void> {
 
   // Create sample missions
   const sampleMissions: Mission[] = [
-    { id: generateId(), name: 'שמירה - שער ראשי', type: 'A_continuous', intensity: 1.0, requiredSoldiers: 2, platoonId, createdAt: now, updatedAt: now },
-    { id: generateId(), name: 'כוננות', type: 'A_continuous', intensity: 0.4, requiredSoldiers: 4, platoonId, createdAt: now, updatedAt: now },
-    { id: generateId(), name: 'סיור היקפי', type: 'C_adhoc', intensity: 0.8, requiredSoldiers: 2, platoonId, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'שמירה - שער ראשי', type: 'A_continuous', intensity: 1.0, requiredSoldiers: 2, requiredCertificateIds: [certIds.marksman], platoonId, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'כוננות', type: 'A_continuous', intensity: 0.4, requiredSoldiers: 4, requiredCertificateIds: [], platoonId, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'סיור היקפי', type: 'C_adhoc', intensity: 0.8, requiredSoldiers: 2, requiredCertificateIds: [certIds.driver], platoonId, createdAt: now, updatedAt: now },
   ];
 
   await db.missions.bulkAdd(sampleMissions);

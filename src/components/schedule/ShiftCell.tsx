@@ -13,6 +13,13 @@ interface ShiftCellProps {
   hour: number;
   minute?: number;
   onRemove?: (shiftId: string) => void;
+  platoonColor?: string;
+  certificates?: string[]; // Certificate names (already resolved)
+}
+
+// Abbreviate certificate name (first 2 chars for Hebrew)
+function abbreviateCert(name: string): string {
+  return name.slice(0, 2);
 }
 
 export function ShiftCell({
@@ -23,6 +30,8 @@ export function ShiftCell({
   hour,
   minute = 0,
   onRemove,
+  platoonColor,
+  certificates = [],
 }: ShiftCellProps) {
   const droppableId = `${missionId}-${hour}-${minute}`;
 
@@ -38,29 +47,40 @@ export function ShiftCell({
     const startTime = new Date(shift.startTime);
     const endTime = new Date(shift.endTime);
 
+    // Generate background and border colors based on platoon color or alert type
+    const bgStyle = platoonColor && !alertType
+      ? { backgroundColor: `${platoonColor}20`, borderColor: `${platoonColor}60` }
+      : undefined;
+
     return (
       <div
         ref={setDraggableRef}
         {...listeners}
         {...attributes}
         className={clsx(
-          'relative group px-1.5 py-1 rounded text-xs cursor-grab active:cursor-grabbing transition-all',
+          'relative group px-1.5 py-1 rounded text-xs cursor-grab active:cursor-grabbing transition-all border',
           isDragging && 'opacity-50',
-          alertType === 'error' && 'bg-red-100 text-red-800 border border-red-300',
-          alertType === 'warning' && 'bg-orange-100 text-orange-800 border border-orange-300',
-          alertType === 'info' && 'bg-blue-100 text-blue-800 border border-blue-200',
-          !alertType && 'bg-blue-100 text-blue-800 border border-blue-200'
+          alertType === 'error' && 'bg-red-100 text-red-800 border-red-300',
+          alertType === 'warning' && 'bg-orange-100 text-orange-800 border-orange-300',
+          !alertType && !platoonColor && 'bg-blue-100 text-blue-800 border-blue-200'
         )}
-        title={`${soldierName} | ${format(startTime, 'HH:mm')}-${format(endTime, 'HH:mm')}`}
+        style={bgStyle}
+        title={`${soldierName} | ${format(startTime, 'HH:mm')}-${format(endTime, 'HH:mm')}${certificates.length > 0 ? ` | ${certificates.join(', ')}` : ''}`}
       >
         <div className="flex items-center gap-1">
           {alertType === 'error' && <AlertCircle className="w-3 h-3 shrink-0" />}
           {alertType === 'warning' && <AlertTriangle className="w-3 h-3 shrink-0" />}
           <span className="truncate font-medium">{soldierName}</span>
         </div>
-        <div className="text-[10px] opacity-75">
-          {format(startTime, 'HH:mm')}-{format(endTime, 'HH:mm')}
-        </div>
+        {certificates.length > 0 && (
+          <div className="flex gap-0.5 text-[10px] opacity-75">
+            {certificates.slice(0, 3).map((cert, i) => (
+              <span key={i} className="px-0.5 bg-black/10 rounded">
+                {abbreviateCert(cert)}
+              </span>
+            ))}
+          </div>
+        )}
         {onRemove && (
           <button
             onClick={(e) => {

@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
-import { X, AlertTriangle, AlertCircle, Clock, User, Users, Check } from 'lucide-react';
+import { X, AlertTriangle, AlertCircle, Clock, User, Users, Check, Award, Info } from 'lucide-react';
 import { format, addMinutes } from 'date-fns';
 import { he } from 'date-fns/locale';
-import type { Mission, Soldier, Shift, Platoon } from '../../types/entities';
+import type { Mission, Soldier, Shift, Platoon, Certificate } from '../../types/entities';
 import { suggestSoldiersForShift } from '../../services/fairnessCalculator';
 import { validateShiftAssignment } from '../../services/validationService';
 import { labels } from '../../utils/translations';
@@ -27,6 +27,7 @@ interface ShiftAssignmentModalProps {
   startTime: Date;
   soldiers: Soldier[];
   platoons: Platoon[];
+  certificates: Certificate[];
   existingShifts: Shift[];
   onAssign: (soldierIds: string[], startTime: Date, endTime: Date) => void;
   onClose: () => void;
@@ -37,6 +38,7 @@ export function ShiftAssignmentModal({
   startTime: initialStartTime,
   soldiers,
   platoons,
+  certificates,
   existingShifts,
   onAssign,
   onClose,
@@ -139,6 +141,43 @@ export function ShiftAssignmentModal({
     return platoon?.name || 'ללא מחלקה';
   };
 
+  const getCertificateName = (certId: string) => {
+    const cert = certificates.find(c => c.id === certId);
+    return cert?.name || '';
+  };
+
+  const getSoldierCertificateNames = (soldier: Soldier): string[] => {
+    if (!soldier.certificateIds) return [];
+    return soldier.certificateIds
+      .map(id => getCertificateName(id))
+      .filter(Boolean);
+  };
+
+  const requiredCertNames = useMemo(() => {
+    if (!mission.requiredCertificateIds) return [];
+    return mission.requiredCertificateIds.map(id => getCertificateName(id)).filter(Boolean);
+  }, [mission.requiredCertificateIds, certificates]);
+
+  // Check which certificates are missing from the selected TEAM (not per soldier)
+  const teamMissingCerts = useMemo(() => {
+    if (!mission.requiredCertificateIds || mission.requiredCertificateIds.length === 0) {
+      return [];
+    }
+
+    // Collect all certificates from selected soldiers
+    const teamCertIds = new Set<string>();
+    for (const soldierId of selectedSoldierIds) {
+      const soldier = soldiers.find(s => s.id === soldierId);
+      if (soldier?.certificateIds) {
+        soldier.certificateIds.forEach(certId => teamCertIds.add(certId));
+      }
+    }
+
+    // Find which required certificates are missing from the team
+    const missingCertIds = mission.requiredCertificateIds.filter(reqCert => !teamCertIds.has(reqCert));
+    return missingCertIds.map(id => getCertificateName(id)).filter(Boolean);
+  }, [selectedSoldierIds, soldiers, mission.requiredCertificateIds]);
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
@@ -199,6 +238,21 @@ export function ShiftAssignmentModal({
               <span className="text-blue-600 font-medium">נבחרו: {selectedSoldierIds.size}</span>
             </div>
           </div>
+
+          {/* Required certificates */}
+          {requiredCertNames.length > 0 && (
+            <div className="flex items-center gap-2 text-sm">
+              <Award className="w-4 h-4 text-amber-600" />
+              <span className="text-slate-600">הסמכות נדרשות:</span>
+              <div className="flex gap-1">
+                {requiredCertNames.map((name, i) => (
+                  <span key={i} className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-xs font-medium">
+                    {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Soldier list grouped by platoon */}
@@ -215,6 +269,7 @@ export function ShiftAssignmentModal({
                   const isSelected = selectedSoldierIds.has(soldier.id);
                   const isUnavailable = soldier.status !== 'available';
                   const isDisabled = hasConflict || isUnavailable;
+                  const soldierCerts = getSoldierCertificateNames(soldier);
 
                   return (
                     <button
@@ -243,7 +298,7 @@ export function ShiftAssignmentModal({
                       <User className="w-4 h-4 text-slate-400 shrink-0" />
 
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-slate-900 text-sm">{soldier.name}</span>
                           <span
                             className={clsx(
@@ -266,6 +321,27 @@ export function ShiftAssignmentModal({
                             </span>
                           )}
                         </div>
+                        {/* Soldier certificates */}
+                        {soldierCerts.length > 0 && (
+                          <div className="flex gap-1 mt-1 flex-wrap">
+                            {soldierCerts.map((certName, i) => {
+                              const isRequired = requiredCertNames.includes(certName);
+                              return (
+                                <span
+                                  key={i}
+                                  className={clsx(
+                                    'px-1.5 py-0.5 rounded text-[10px] font-medium',
+                                    isRequired
+                                      ? 'bg-green-100 text-green-700 border border-green-300'
+                                      : 'bg-slate-100 text-slate-600'
+                                  )}
+                                >
+                                  {certName}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
 
                       <span className="text-xs text-slate-500">
@@ -308,6 +384,28 @@ export function ShiftAssignmentModal({
                   </span>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* Missing certificates warning - for the team as a whole */}
+        {teamMissingCerts.length > 0 && selectedSoldierIds.size > 0 && (
+          <div className="px-6 py-2 border-t border-slate-200 bg-amber-50">
+            <div className="flex items-start gap-2 text-sm text-amber-800">
+              <Info className="w-4 h-4 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-medium">הסמכות חסרות לצוות:</span>
+                <div className="flex gap-1 mt-1 flex-wrap">
+                  {teamMissingCerts.map((certName, i) => (
+                    <span
+                      key={i}
+                      className="px-2 py-0.5 bg-amber-100 border border-amber-300 rounded text-xs font-medium"
+                    >
+                      {certName}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}

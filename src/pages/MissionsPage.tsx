@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Award } from 'lucide-react';
 import { useMissionStore } from '../stores/missionStore';
 import { usePlatoonStore } from '../stores/platoonStore';
 import { labels, getMissionTypeLabel } from '../utils/translations';
@@ -14,15 +14,29 @@ const MISSION_TYPE_COLORS: Record<MissionType, string> = {
 
 export function MissionsPage() {
   const { missions, loadMissions, addMission, updateMission, deleteMission } = useMissionStore();
-  const { currentPlatoonId, loadPlatoons } = usePlatoonStore();
+  const { currentPlatoonId, loadPlatoons, certificates, loadCertificates } = usePlatoonStore();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMission, setEditingMission] = useState<Mission | null>(null);
+  const [selectedCertificateIds, setSelectedCertificateIds] = useState<string[]>([]);
 
   useEffect(() => {
     loadPlatoons();
+    loadCertificates();
     loadMissions();
-  }, [loadPlatoons, loadMissions]);
+  }, [loadPlatoons, loadCertificates, loadMissions]);
+
+  const getCertificateName = (certId: string) => {
+    return certificates.find(c => c.id === certId)?.name || '';
+  };
+
+  const toggleCertificate = (certId: string) => {
+    setSelectedCertificateIds(prev =>
+      prev.includes(certId)
+        ? prev.filter(id => id !== certId)
+        : [...prev, certId]
+    );
+  };
 
   const filteredMissions = currentPlatoonId
     ? missions.filter((m) => m.platoonId === currentPlatoonId)
@@ -30,11 +44,13 @@ export function MissionsPage() {
 
   const handleAddMission = () => {
     setEditingMission(null);
+    setSelectedCertificateIds([]);
     setIsModalOpen(true);
   };
 
   const handleEditMission = (mission: Mission) => {
     setEditingMission(mission);
+    setSelectedCertificateIds(mission.requiredCertificateIds || []);
     setIsModalOpen(true);
   };
 
@@ -53,6 +69,7 @@ export function MissionsPage() {
       type: formData.get('type') as MissionType,
       intensity: parseFloat(formData.get('intensity') as string),
       requiredSoldiers: parseInt(formData.get('requiredSoldiers') as string, 10),
+      requiredCertificateIds: selectedCertificateIds,
       platoonId: currentPlatoonId || '',
     };
 
@@ -98,6 +115,9 @@ export function MissionsPage() {
                   {labels.form.requiredSoldiers}
                 </th>
                 <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
+                  הסמכות נדרשות
+                </th>
+                <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
                   פעולות
                 </th>
               </tr>
@@ -123,6 +143,23 @@ export function MissionsPage() {
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-600">
                     {mission.requiredSoldiers}
+                  </td>
+                  <td className="px-4 py-3">
+                    {mission.requiredCertificateIds && mission.requiredCertificateIds.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {mission.requiredCertificateIds.map((certId) => (
+                          <span
+                            key={certId}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-700 text-xs rounded border border-amber-200"
+                          >
+                            <Award className="w-3 h-3" />
+                            {getCertificateName(certId)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-slate-400">-</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1">
@@ -220,6 +257,36 @@ export function MissionsPage() {
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+
+              {/* Required Certificates */}
+              {certificates.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    הסמכות נדרשות
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {certificates.map((cert) => (
+                      <button
+                        key={cert.id}
+                        type="button"
+                        onClick={() => toggleCertificate(cert.id)}
+                        className={clsx(
+                          'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors',
+                          selectedCertificateIds.includes(cert.id)
+                            ? 'bg-amber-100 border-amber-400 text-amber-800'
+                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                        )}
+                      >
+                        <Award className="w-3.5 h-3.5" />
+                        {cert.name}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    בחר הסמכות שנדרשות למשימה זו (אופציונלי)
+                  </p>
+                </div>
+              )}
 
               <div className="flex gap-3 pt-4">
                 <button

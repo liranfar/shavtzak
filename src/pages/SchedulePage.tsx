@@ -15,6 +15,7 @@ import { useMissionStore } from '../stores/missionStore';
 import { useScheduleStore } from '../stores/scheduleStore';
 import { useSoldierStore } from '../stores/soldierStore';
 import { usePlatoonStore } from '../stores/platoonStore';
+import type { Soldier } from '../types/entities';
 import { ShiftAssignmentModal } from '../components/schedule/ShiftAssignmentModal';
 import { ShiftCell } from '../components/schedule/ShiftCell';
 import { SoldierDragOverlay } from '../components/schedule/SoldierDragOverlay';
@@ -36,7 +37,7 @@ export function SchedulePage() {
   const { missions, loadMissions } = useMissionStore();
   const { shifts, selectedDate, setSelectedDate, loadShifts, addShift, deleteShift } = useScheduleStore();
   const { soldiers, loadSoldiers, updateFairnessScore } = useSoldierStore();
-  const { platoons, currentPlatoonId, loadPlatoons, loadSquads } = usePlatoonStore();
+  const { platoons, currentPlatoonId, loadPlatoons, loadSquads, certificates, loadCertificates } = usePlatoonStore();
 
   const [modalData, setModalData] = useState<{
     mission: Mission;
@@ -56,10 +57,11 @@ export function SchedulePage() {
   useEffect(() => {
     loadPlatoons();
     loadSquads();
+    loadCertificates();
     loadMissions();
     loadSoldiers();
     loadShifts();
-  }, [loadPlatoons, loadSquads, loadMissions, loadSoldiers, loadShifts]);
+  }, [loadPlatoons, loadSquads, loadCertificates, loadMissions, loadSoldiers, loadShifts]);
 
   const filteredMissions = currentPlatoonId
     ? missions.filter((m) => m.platoonId === currentPlatoonId)
@@ -120,9 +122,28 @@ export function SchedulePage() {
     });
   };
 
+  const getSoldier = (soldierId: string): Soldier | undefined => {
+    return soldiers.find((s) => s.id === soldierId);
+  };
+
   const getSoldierName = (soldierId: string) => {
-    const soldier = soldiers.find((s) => s.id === soldierId);
+    const soldier = getSoldier(soldierId);
     return soldier?.name || 'לא ידוע';
+  };
+
+  const getSoldierCertificates = (soldierId: string): string[] => {
+    const soldier = getSoldier(soldierId);
+    if (!soldier || !soldier.certificateIds) return [];
+    return soldier.certificateIds
+      .map((certId) => certificates.find((c) => c.id === certId)?.name)
+      .filter((name): name is string => !!name);
+  };
+
+  const getPlatoonColor = (soldierId: string): string | undefined => {
+    const soldier = getSoldier(soldierId);
+    if (!soldier) return undefined;
+    const platoon = platoons.find((p) => p.id === soldier.platoonId);
+    return platoon?.color;
   };
 
   const handleCellClick = (mission: Mission, hour: number, minute: number) => {
@@ -301,10 +322,7 @@ export function SchedulePage() {
                           return (
                             <td
                               key={slot.label}
-                              className={clsx(
-                                'px-1 py-1 border-l border-slate-200 align-top',
-                                isContinuation && 'bg-blue-50/50'
-                              )}
+                              className="px-1 py-1 border-l border-slate-200 align-top"
                             >
                               <div className="min-h-[60px] space-y-1">
                                 {/* Show shifts starting at this slot (or continuing from previous day at 00:00) */}
@@ -317,8 +335,43 @@ export function SchedulePage() {
                                     missionId={mission.id}
                                     hour={slot.hour}
                                     onRemove={handleRemoveShift}
+                                    platoonColor={getPlatoonColor(shift.soldierId)}
+                                    certificates={getSoldierCertificates(shift.soldierId)}
                                   />
                                 ))}
+
+                                {/* Show continuation markers with soldier names */}
+                                {isContinuation && shiftsCoveringThisSlot.map((shift) => {
+                                  const platoonColor = getPlatoonColor(shift.soldierId);
+                                  const certs = getSoldierCertificates(shift.soldierId);
+                                  return (
+                                    <div
+                                      key={`cont-${shift.id}`}
+                                      className="px-1 py-0.5 rounded text-[10px] border opacity-70"
+                                      style={platoonColor ? {
+                                        backgroundColor: `${platoonColor}15`,
+                                        borderColor: `${platoonColor}40`,
+                                        color: platoonColor,
+                                      } : {
+                                        backgroundColor: '#EFF6FF',
+                                        borderColor: '#BFDBFE',
+                                        color: '#1D4ED8',
+                                      }}
+                                      title={`${getSoldierName(shift.soldierId)}${certs.length > 0 ? ` | ${certs.join(', ')}` : ''}`}
+                                    >
+                                      <span className="font-medium truncate block">{getSoldierName(shift.soldierId)}</span>
+                                      {certs.length > 0 && (
+                                        <span className="flex gap-0.5 opacity-75">
+                                          {certs.slice(0, 2).map((cert, i) => (
+                                            <span key={i} className="px-0.5 bg-black/10 rounded">
+                                              {cert.slice(0, 2)}
+                                            </span>
+                                          ))}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
 
                                 {/* Add button - always visible for multiple assignments */}
                                 <button
@@ -444,6 +497,7 @@ export function SchedulePage() {
           startTime={modalData.startTime}
           soldiers={soldiers}
           platoons={platoons}
+          certificates={certificates}
           existingShifts={shifts}
           onAssign={handleAssignSoldiers}
           onClose={() => setModalData(null)}

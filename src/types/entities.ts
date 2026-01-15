@@ -32,6 +32,7 @@ export interface Mission {
   type: MissionType;
   intensity: number; // 1.0 = active, 0.4 = standby
   requiredSoldiers: number;
+  requiredCertificateIds: string[]; // Required certificates for this mission
   platoonId: string; // assigned platoon
   createdAt: Date;
   updatedAt: Date;
@@ -52,6 +53,7 @@ export interface Platoon {
   id: string;
   name: string;
   companyId: string;
+  color: string; // Hex color for visual distinction
   createdAt: Date;
 }
 
