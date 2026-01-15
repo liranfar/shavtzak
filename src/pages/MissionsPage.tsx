@@ -38,9 +38,8 @@ export function MissionsPage() {
     );
   };
 
-  const filteredMissions = currentPlatoonId
-    ? missions.filter((m) => m.platoonId === currentPlatoonId)
-    : missions;
+  // Show all missions - don't filter by currentPlatoonId
+  const filteredMissions = missions;
 
   const handleAddMission = () => {
     setEditingMission(null);
