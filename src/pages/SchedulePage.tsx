@@ -36,7 +36,7 @@ export function SchedulePage() {
   const { missions, loadMissions } = useMissionStore();
   const { shifts, selectedDate, setSelectedDate, loadShifts, addShift, deleteShift } = useScheduleStore();
   const { soldiers, loadSoldiers, updateFairnessScore } = useSoldierStore();
-  const { platoons, currentPlatoonId, loadPlatoons, loadSquads, certificates, loadCertificates } = usePlatoonStore();
+  const { platoons, loadPlatoons, loadSquads, certificates, loadCertificates } = usePlatoonStore();
 
   const [modalData, setModalData] = useState<{
     mission: Mission;
@@ -61,9 +61,8 @@ export function SchedulePage() {
     loadShifts();
   }, [loadPlatoons, loadSquads, loadCertificates, loadMissions, loadSoldiers, loadShifts]);
 
-  const filteredMissions = currentPlatoonId
-    ? missions.filter((m) => m.platoonId === currentPlatoonId)
-    : missions;
+  // Show all missions - don't filter by currentPlatoonId
+  const filteredMissions = missions;
 
   // Validate all shifts for the current day
   const alertsByShift = useMemo(() => {
