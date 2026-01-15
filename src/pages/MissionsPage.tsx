@@ -2,15 +2,10 @@ import { useEffect, useState } from 'react';
 import { Plus, Edit2, Trash2, Award } from 'lucide-react';
 import { useMissionStore } from '../stores/missionStore';
 import { usePlatoonStore } from '../stores/platoonStore';
-import { labels, getMissionTypeLabel } from '../utils/translations';
+import { labels } from '../utils/translations';
 import { MISSION_INTENSITY } from '../utils/constants';
-import type { Mission, MissionType } from '../types/entities';
+import type { Mission } from '../types/entities';
 import clsx from 'clsx';
-
-const MISSION_TYPE_COLORS: Record<MissionType, string> = {
-  A_continuous: 'bg-red-100 text-red-800',
-  C_adhoc: 'bg-yellow-100 text-yellow-800',
-};
 
 export function MissionsPage() {
   const { missions, loadMissions, addMission, updateMission, deleteMission } = useMissionStore();
@@ -65,7 +60,6 @@ export function MissionsPage() {
 
     const missionData = {
       name: formData.get('name') as string,
-      type: formData.get('type') as MissionType,
       intensity: parseFloat(formData.get('intensity') as string),
       requiredSoldiers: parseInt(formData.get('requiredSoldiers') as string, 10),
       requiredCertificateIds: selectedCertificateIds,
@@ -105,9 +99,6 @@ export function MissionsPage() {
                   {labels.form.missionName}
                 </th>
                 <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
-                  {labels.form.missionType}
-                </th>
-                <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
                   {labels.form.intensity}
                 </th>
                 <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
@@ -126,16 +117,6 @@ export function MissionsPage() {
                 <tr key={mission.id} className="border-b border-slate-100 hover:bg-slate-50">
                   <td className="px-4 py-3 text-sm font-medium text-slate-900">
                     {mission.name}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={clsx(
-                        'px-2 py-1 rounded text-xs font-medium',
-                        MISSION_TYPE_COLORS[mission.type]
-                      )}
-                    >
-                      {getMissionTypeLabel(mission.type)}
-                    </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-600">
                     {mission.intensity}
@@ -209,21 +190,6 @@ export function MissionsPage() {
                   defaultValue={editingMission?.name}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  {labels.form.missionType}
-                </label>
-                <select
-                  name="type"
-                  required
-                  defaultValue={editingMission?.type || 'A_continuous'}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="A_continuous">{labels.missionTypes.A_continuous}</option>
-                  <option value="C_adhoc">{labels.missionTypes.C_adhoc}</option>
-                </select>
               </div>
 
               <div>

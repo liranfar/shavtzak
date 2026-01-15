@@ -2,7 +2,6 @@
 
 export type SoldierRole = 'officer' | 'nco' | 'soldier';
 export type SoldierStatus = 'available' | 'home' | 'task_locked' | 'sick';
-export type MissionType = 'A_continuous' | 'C_adhoc';
 export type ShiftStatus = 'scheduled' | 'active' | 'completed' | 'cancelled';
 
 export interface Soldier {
@@ -29,7 +28,6 @@ export interface Certificate {
 export interface Mission {
   id: string;
   name: string;
-  type: MissionType;
   intensity: number; // 1.0 = active, 0.4 = standby
   requiredSoldiers: number;
   requiredCertificateIds: string[]; // Required certificates for this mission

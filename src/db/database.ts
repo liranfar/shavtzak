@@ -129,41 +129,69 @@ export function generatePlatoonColor(): string {
 }
 
 // Seed data for initial setup
-export async function seedDatabase(): Promise<void> {
-  const platoonCount = await db.platoons.count();
+let seedingInProgress = false;
 
-  if (platoonCount > 0) {
-    console.log('Database already seeded');
+export async function seedDatabase(): Promise<void> {
+  // Prevent race condition from React StrictMode double-invocation
+  if (seedingInProgress) {
+    console.log('Seeding already in progress');
     return;
   }
+  seedingInProgress = true;
 
-  const now = new Date();
+  try {
+    const platoonCount = await db.platoons.count();
+    if (platoonCount > 0) {
+      console.log('Database already seeded');
+      return;
+    }
 
-  // Create default platoon
-  const platoonId = generateId();
-  await db.platoons.add({
-    id: platoonId,
-    name: 'מחלקה א׳',
-    companyId: 'company-1',
-    color: '#3B82F6', // blue
-    createdAt: now,
-  });
+    const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  // Create squads
-  const squadIds = [generateId(), generateId(), generateId()];
-  await db.squads.bulkAdd([
-    { id: squadIds[0], name: 'כיתה 1', platoonId, createdAt: now },
-    { id: squadIds[1], name: 'כיתה 2', platoonId, createdAt: now },
-    { id: squadIds[2], name: 'כיתה 3', platoonId, createdAt: now },
+  // Create platoons
+  const platoonIds = {
+    aleph: generateId(),
+    bet: generateId(),
+    gimel: generateId(),
+  };
+
+  await db.platoons.bulkAdd([
+    { id: platoonIds.aleph, name: 'מחלקה א׳', companyId: 'company-1', color: '#3B82F6', createdAt: now }, // blue
+    { id: platoonIds.bet, name: 'מחלקה ב׳', companyId: 'company-1', color: '#10B981', createdAt: now }, // emerald
+    { id: platoonIds.gimel, name: 'מחלקה ג׳', companyId: 'company-1', color: '#F59E0B', createdAt: now }, // amber
   ]);
 
-  // Create default certificates
+  // Create squads for each platoon
+  const squadIds = {
+    aleph1: generateId(), aleph2: generateId(), aleph3: generateId(),
+    bet1: generateId(), bet2: generateId(), bet3: generateId(),
+    gimel1: generateId(), gimel2: generateId(), gimel3: generateId(),
+  };
+
+  await db.squads.bulkAdd([
+    // מחלקה א׳
+    { id: squadIds.aleph1, name: 'כיתה א׳1', platoonId: platoonIds.aleph, createdAt: now },
+    { id: squadIds.aleph2, name: 'כיתה א׳2', platoonId: platoonIds.aleph, createdAt: now },
+    { id: squadIds.aleph3, name: 'כיתה א׳3', platoonId: platoonIds.aleph, createdAt: now },
+    // מחלקה ב׳
+    { id: squadIds.bet1, name: 'כיתה ב׳1', platoonId: platoonIds.bet, createdAt: now },
+    { id: squadIds.bet2, name: 'כיתה ב׳2', platoonId: platoonIds.bet, createdAt: now },
+    { id: squadIds.bet3, name: 'כיתה ב׳3', platoonId: platoonIds.bet, createdAt: now },
+    // מחלקה ג׳
+    { id: squadIds.gimel1, name: 'כיתה ג׳1', platoonId: platoonIds.gimel, createdAt: now },
+    { id: squadIds.gimel2, name: 'כיתה ג׳2', platoonId: platoonIds.gimel, createdAt: now },
+    { id: squadIds.gimel3, name: 'כיתה ג׳3', platoonId: platoonIds.gimel, createdAt: now },
+  ]);
+
+  // Create certificates
   const certIds = {
     marksman: generateId(),
     medic: generateId(),
     driver: generateId(),
     negev: generateId(),
     mag: generateId(),
+    commander: generateId(),
   };
   await db.certificates.bulkAdd([
     { id: certIds.marksman, name: 'קלע', createdAt: now },
@@ -171,33 +199,132 @@ export async function seedDatabase(): Promise<void> {
     { id: certIds.driver, name: 'נהג', createdAt: now },
     { id: certIds.negev, name: 'נגב', createdAt: now },
     { id: certIds.mag, name: 'מג', createdAt: now },
+    { id: certIds.commander, name: 'מפקד כיתה', createdAt: now },
   ]);
 
-  // Create sample soldiers
+  // Create soldiers - store IDs for shift creation
+  const soldierIds: string[] = [];
+
   const sampleSoldiers: Soldier[] = [
-    { id: generateId(), name: 'ישראל ישראלי', personalNumber: '1234567', phoneNumber: '050-1234567', role: 'nco', status: 'available', platoonId, squadId: squadIds[0], certificateIds: [certIds.driver, certIds.medic], fairnessScore: 0, createdAt: now, updatedAt: now },
-    { id: generateId(), name: 'משה כהן', personalNumber: '2345678', phoneNumber: '052-2345678', role: 'soldier', status: 'available', platoonId, squadId: squadIds[0], certificateIds: [certIds.marksman], fairnessScore: 0, createdAt: now, updatedAt: now },
-    { id: generateId(), name: 'דוד לוי', personalNumber: '3456789', phoneNumber: '054-3456789', role: 'soldier', status: 'available', platoonId, squadId: squadIds[0], certificateIds: [certIds.negev], fairnessScore: 0, createdAt: now, updatedAt: now },
-    { id: generateId(), name: 'יעקב אברהם', personalNumber: '4567890', phoneNumber: '050-4567890', role: 'nco', status: 'available', platoonId, squadId: squadIds[1], certificateIds: [certIds.driver, certIds.marksman], fairnessScore: 0, createdAt: now, updatedAt: now },
-    { id: generateId(), name: 'אבי רוזן', personalNumber: '5678901', phoneNumber: '052-5678901', role: 'soldier', status: 'available', platoonId, squadId: squadIds[1], certificateIds: [certIds.mag], fairnessScore: 0, createdAt: now, updatedAt: now },
-    { id: generateId(), name: 'רון שמעון', personalNumber: '6789012', phoneNumber: '054-6789012', role: 'soldier', status: 'home', platoonId, squadId: squadIds[1], certificateIds: [], fairnessScore: 0, createdAt: now, updatedAt: now },
-    { id: generateId(), name: 'עמית גולן', personalNumber: '7890123', phoneNumber: '050-7890123', role: 'nco', status: 'available', platoonId, squadId: squadIds[2], certificateIds: [certIds.medic], fairnessScore: 0, createdAt: now, updatedAt: now },
-    { id: generateId(), name: 'תומר נחום', personalNumber: '8901234', phoneNumber: '052-8901234', role: 'soldier', status: 'available', platoonId, squadId: squadIds[2], certificateIds: [certIds.driver], fairnessScore: 0, createdAt: now, updatedAt: now },
-    { id: generateId(), name: 'גיל בראון', personalNumber: '9012345', phoneNumber: '054-9012345', role: 'soldier', status: 'sick', platoonId, squadId: squadIds[2], certificateIds: [], fairnessScore: 0, createdAt: now, updatedAt: now },
+    // מחלקה א׳ - כיתה 1
+    { id: generateId(), name: 'ישראל ישראלי', personalNumber: '1234567', phoneNumber: '050-1234567', role: 'nco', status: 'available', platoonId: platoonIds.aleph, squadId: squadIds.aleph1, certificateIds: [certIds.driver, certIds.medic, certIds.commander], fairnessScore: 12, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'משה כהן', personalNumber: '2345678', phoneNumber: '052-2345678', role: 'soldier', status: 'available', platoonId: platoonIds.aleph, squadId: squadIds.aleph1, certificateIds: [certIds.marksman], fairnessScore: 8, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'דוד לוי', personalNumber: '3456789', phoneNumber: '054-3456789', role: 'soldier', status: 'available', platoonId: platoonIds.aleph, squadId: squadIds.aleph1, certificateIds: [certIds.negev], fairnessScore: 15, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'יוסי אלון', personalNumber: '3456001', phoneNumber: '050-3456001', role: 'soldier', status: 'available', platoonId: platoonIds.aleph, squadId: squadIds.aleph1, certificateIds: [], fairnessScore: 6, createdAt: now, updatedAt: now },
+    // מחלקה א׳ - כיתה 2
+    { id: generateId(), name: 'יעקב אברהם', personalNumber: '4567890', phoneNumber: '050-4567890', role: 'nco', status: 'available', platoonId: platoonIds.aleph, squadId: squadIds.aleph2, certificateIds: [certIds.driver, certIds.marksman, certIds.commander], fairnessScore: 10, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'אבי רוזן', personalNumber: '5678901', phoneNumber: '052-5678901', role: 'soldier', status: 'available', platoonId: platoonIds.aleph, squadId: squadIds.aleph2, certificateIds: [certIds.mag], fairnessScore: 18, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'רון שמעון', personalNumber: '6789012', phoneNumber: '054-6789012', role: 'soldier', status: 'home', platoonId: platoonIds.aleph, squadId: squadIds.aleph2, certificateIds: [], fairnessScore: 4, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'נתן ברק', personalNumber: '6789013', phoneNumber: '052-6789013', role: 'soldier', status: 'available', platoonId: platoonIds.aleph, squadId: squadIds.aleph2, certificateIds: [certIds.driver], fairnessScore: 9, createdAt: now, updatedAt: now },
+    // מחלקה א׳ - כיתה 3
+    { id: generateId(), name: 'עמית גולן', personalNumber: '7890123', phoneNumber: '050-7890123', role: 'nco', status: 'available', platoonId: platoonIds.aleph, squadId: squadIds.aleph3, certificateIds: [certIds.medic, certIds.commander], fairnessScore: 14, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'תומר נחום', personalNumber: '8901234', phoneNumber: '052-8901234', role: 'soldier', status: 'available', platoonId: platoonIds.aleph, squadId: squadIds.aleph3, certificateIds: [certIds.driver], fairnessScore: 7, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'גיל בראון', personalNumber: '9012345', phoneNumber: '054-9012345', role: 'soldier', status: 'sick', platoonId: platoonIds.aleph, squadId: squadIds.aleph3, certificateIds: [], fairnessScore: 3, createdAt: now, updatedAt: now },
+
+    // מחלקה ב׳ - כיתה 1
+    { id: generateId(), name: 'אריאל שרון', personalNumber: '1111111', phoneNumber: '050-1111111', role: 'nco', status: 'available', platoonId: platoonIds.bet, squadId: squadIds.bet1, certificateIds: [certIds.commander, certIds.marksman], fairnessScore: 11, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'בני גנץ', personalNumber: '1111112', phoneNumber: '052-1111112', role: 'soldier', status: 'available', platoonId: platoonIds.bet, squadId: squadIds.bet1, certificateIds: [certIds.driver], fairnessScore: 16, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'גדי איזנקוט', personalNumber: '1111113', phoneNumber: '054-1111113', role: 'soldier', status: 'available', platoonId: platoonIds.bet, squadId: squadIds.bet1, certificateIds: [certIds.negev, certIds.marksman], fairnessScore: 5, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'דני חלוץ', personalNumber: '1111114', phoneNumber: '050-1111114', role: 'soldier', status: 'available', platoonId: platoonIds.bet, squadId: squadIds.bet1, certificateIds: [], fairnessScore: 13, createdAt: now, updatedAt: now },
+    // מחלקה ב׳ - כיתה 2
+    { id: generateId(), name: 'הראל לוי', personalNumber: '2222221', phoneNumber: '052-2222221', role: 'nco', status: 'available', platoonId: platoonIds.bet, squadId: squadIds.bet2, certificateIds: [certIds.commander, certIds.medic], fairnessScore: 8, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'ורד כהן', personalNumber: '2222222', phoneNumber: '054-2222222', role: 'soldier', status: 'available', platoonId: platoonIds.bet, squadId: squadIds.bet2, certificateIds: [certIds.mag], fairnessScore: 19, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'זיו אדם', personalNumber: '2222223', phoneNumber: '050-2222223', role: 'soldier', status: 'home', platoonId: platoonIds.bet, squadId: squadIds.bet2, certificateIds: [certIds.driver], fairnessScore: 2, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'חן נאור', personalNumber: '2222224', phoneNumber: '052-2222224', role: 'soldier', status: 'available', platoonId: platoonIds.bet, squadId: squadIds.bet2, certificateIds: [], fairnessScore: 10, createdAt: now, updatedAt: now },
+    // מחלקה ב׳ - כיתה 3
+    { id: generateId(), name: 'טל רמון', personalNumber: '3333331', phoneNumber: '054-3333331', role: 'nco', status: 'available', platoonId: platoonIds.bet, squadId: squadIds.bet3, certificateIds: [certIds.commander, certIds.driver], fairnessScore: 7, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'יובל דיין', personalNumber: '3333332', phoneNumber: '050-3333332', role: 'soldier', status: 'available', platoonId: platoonIds.bet, squadId: squadIds.bet3, certificateIds: [certIds.marksman], fairnessScore: 14, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'כפיר לביא', personalNumber: '3333333', phoneNumber: '052-3333333', role: 'soldier', status: 'available', platoonId: platoonIds.bet, squadId: squadIds.bet3, certificateIds: [certIds.negev], fairnessScore: 6, createdAt: now, updatedAt: now },
+
+    // מחלקה ג׳ - כיתה 1
+    { id: generateId(), name: 'ליאור אשכנזי', personalNumber: '4444441', phoneNumber: '050-4444441', role: 'nco', status: 'available', platoonId: platoonIds.gimel, squadId: squadIds.gimel1, certificateIds: [certIds.commander, certIds.medic, certIds.driver], fairnessScore: 9, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'מיכאל זוהר', personalNumber: '4444442', phoneNumber: '052-4444442', role: 'soldier', status: 'available', platoonId: platoonIds.gimel, squadId: squadIds.gimel1, certificateIds: [certIds.marksman], fairnessScore: 17, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'נועם קמחי', personalNumber: '4444443', phoneNumber: '054-4444443', role: 'soldier', status: 'available', platoonId: platoonIds.gimel, squadId: squadIds.gimel1, certificateIds: [certIds.mag], fairnessScore: 4, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'סהר טוב', personalNumber: '4444444', phoneNumber: '050-4444444', role: 'soldier', status: 'sick', platoonId: platoonIds.gimel, squadId: squadIds.gimel1, certificateIds: [], fairnessScore: 11, createdAt: now, updatedAt: now },
+    // מחלקה ג׳ - כיתה 2
+    { id: generateId(), name: 'עידן רייכל', personalNumber: '5555551', phoneNumber: '052-5555551', role: 'nco', status: 'available', platoonId: platoonIds.gimel, squadId: squadIds.gimel2, certificateIds: [certIds.commander], fairnessScore: 15, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'פז שמש', personalNumber: '5555552', phoneNumber: '054-5555552', role: 'soldier', status: 'available', platoonId: platoonIds.gimel, squadId: squadIds.gimel2, certificateIds: [certIds.driver, certIds.negev], fairnessScore: 8, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'צחי הלוי', personalNumber: '5555553', phoneNumber: '050-5555553', role: 'soldier', status: 'available', platoonId: platoonIds.gimel, squadId: squadIds.gimel2, certificateIds: [certIds.marksman], fairnessScore: 12, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'קובי פרץ', personalNumber: '5555554', phoneNumber: '052-5555554', role: 'soldier', status: 'home', platoonId: platoonIds.gimel, squadId: squadIds.gimel2, certificateIds: [], fairnessScore: 3, createdAt: now, updatedAt: now },
+    // מחלקה ג׳ - כיתה 3
+    { id: generateId(), name: 'רועי גל', personalNumber: '6666661', phoneNumber: '054-6666661', role: 'nco', status: 'available', platoonId: platoonIds.gimel, squadId: squadIds.gimel3, certificateIds: [certIds.commander, certIds.medic], fairnessScore: 6, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'שי אגסי', personalNumber: '6666662', phoneNumber: '050-6666662', role: 'soldier', status: 'available', platoonId: platoonIds.gimel, squadId: squadIds.gimel3, certificateIds: [certIds.driver], fairnessScore: 18, createdAt: now, updatedAt: now },
+    { id: generateId(), name: 'תמיר לוין', personalNumber: '6666663', phoneNumber: '052-6666663', role: 'soldier', status: 'available', platoonId: platoonIds.gimel, squadId: squadIds.gimel3, certificateIds: [certIds.mag, certIds.negev], fairnessScore: 10, createdAt: now, updatedAt: now },
   ];
 
+  // Collect soldier IDs for shift assignment
+  sampleSoldiers.forEach(s => soldierIds.push(s.id));
   await db.soldiers.bulkAdd(sampleSoldiers);
 
-  // Create sample missions
+  // Create missions
+  const missionIds = {
+    gate: generateId(),
+    patrol: generateId(),
+    standby: generateId(),
+    observation: generateId(),
+    escort: generateId(),
+    command: generateId(),
+  };
+
   const sampleMissions: Mission[] = [
-    { id: generateId(), name: 'שמירה - שער ראשי', type: 'A_continuous', intensity: 1.0, requiredSoldiers: 2, requiredCertificateIds: [certIds.marksman], platoonId, createdAt: now, updatedAt: now },
-    { id: generateId(), name: 'כוננות', type: 'A_continuous', intensity: 0.4, requiredSoldiers: 4, requiredCertificateIds: [], platoonId, createdAt: now, updatedAt: now },
-    { id: generateId(), name: 'סיור היקפי', type: 'C_adhoc', intensity: 0.8, requiredSoldiers: 2, requiredCertificateIds: [certIds.driver], platoonId, createdAt: now, updatedAt: now },
+    { id: missionIds.gate, name: 'שמירה - שער ראשי', intensity: 1.0, requiredSoldiers: 2, requiredCertificateIds: [certIds.marksman], platoonId: platoonIds.aleph, createdAt: now, updatedAt: now },
+    { id: missionIds.patrol, name: 'סיור היקפי', intensity: 0.8, requiredSoldiers: 2, requiredCertificateIds: [certIds.driver], platoonId: platoonIds.aleph, createdAt: now, updatedAt: now },
+    { id: missionIds.standby, name: 'כוננות', intensity: 0.4, requiredSoldiers: 4, requiredCertificateIds: [], platoonId: platoonIds.aleph, createdAt: now, updatedAt: now },
+    { id: missionIds.observation, name: 'תצפית', intensity: 0.6, requiredSoldiers: 1, requiredCertificateIds: [], platoonId: platoonIds.bet, createdAt: now, updatedAt: now },
+    { id: missionIds.escort, name: 'ליווי', intensity: 0.8, requiredSoldiers: 3, requiredCertificateIds: [certIds.driver], platoonId: platoonIds.bet, createdAt: now, updatedAt: now },
+    { id: missionIds.command, name: 'פיקוד', intensity: 0.6, requiredSoldiers: 1, requiredCertificateIds: [certIds.commander], platoonId: platoonIds.gimel, createdAt: now, updatedAt: now },
   ];
 
   await db.missions.bulkAdd(sampleMissions);
 
-  console.log('Database seeded successfully');
+  // Create sample shifts for today
+  const shifts: Shift[] = [
+    // שמירה - שער ראשי - morning
+    { id: generateId(), missionId: missionIds.gate, soldierId: soldierIds[1], startTime: new Date(today.getTime() + 6 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 10 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 4, createdAt: now },
+    { id: generateId(), missionId: missionIds.gate, soldierId: soldierIds[2], startTime: new Date(today.getTime() + 6 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 10 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 4, createdAt: now },
+    // שמירה - שער ראשי - afternoon
+    { id: generateId(), missionId: missionIds.gate, soldierId: soldierIds[4], startTime: new Date(today.getTime() + 10 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 14 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 4, createdAt: now },
+    { id: generateId(), missionId: missionIds.gate, soldierId: soldierIds[5], startTime: new Date(today.getTime() + 10 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 14 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 4, createdAt: now },
+    // שמירה - שער ראשי - evening
+    { id: generateId(), missionId: missionIds.gate, soldierId: soldierIds[8], startTime: new Date(today.getTime() + 14 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 18 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 4, createdAt: now },
+    { id: generateId(), missionId: missionIds.gate, soldierId: soldierIds[9], startTime: new Date(today.getTime() + 14 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 18 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 4, createdAt: now },
+    // שמירה - שער ראשי - night
+    { id: generateId(), missionId: missionIds.gate, soldierId: soldierIds[11], startTime: new Date(today.getTime() + 18 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 22 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 4, createdAt: now },
+    { id: generateId(), missionId: missionIds.gate, soldierId: soldierIds[12], startTime: new Date(today.getTime() + 18 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 22 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 4, createdAt: now },
+
+    // סיור היקפי
+    { id: generateId(), missionId: missionIds.patrol, soldierId: soldierIds[0], startTime: new Date(today.getTime() + 8 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 12 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 3.2, createdAt: now },
+    { id: generateId(), missionId: missionIds.patrol, soldierId: soldierIds[7], startTime: new Date(today.getTime() + 8 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 12 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 3.2, createdAt: now },
+    { id: generateId(), missionId: missionIds.patrol, soldierId: soldierIds[13], startTime: new Date(today.getTime() + 16 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 20 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 3.2, createdAt: now },
+    { id: generateId(), missionId: missionIds.patrol, soldierId: soldierIds[19], startTime: new Date(today.getTime() + 16 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 20 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 3.2, createdAt: now },
+
+    // כוננות
+    { id: generateId(), missionId: missionIds.standby, soldierId: soldierIds[3], startTime: new Date(today.getTime() + 6 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 18 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 4.8, createdAt: now },
+    { id: generateId(), missionId: missionIds.standby, soldierId: soldierIds[14], startTime: new Date(today.getTime() + 6 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 18 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 4.8, createdAt: now },
+    { id: generateId(), missionId: missionIds.standby, soldierId: soldierIds[23], startTime: new Date(today.getTime() + 6 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 18 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 4.8, createdAt: now },
+    { id: generateId(), missionId: missionIds.standby, soldierId: soldierIds[27], startTime: new Date(today.getTime() + 6 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 18 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 4.8, createdAt: now },
+
+    // תצפית
+    { id: generateId(), missionId: missionIds.observation, soldierId: soldierIds[15], startTime: new Date(today.getTime() + 6 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 12 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 3.6, createdAt: now },
+    { id: generateId(), missionId: missionIds.observation, soldierId: soldierIds[20], startTime: new Date(today.getTime() + 12 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 18 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 3.6, createdAt: now },
+    { id: generateId(), missionId: missionIds.observation, soldierId: soldierIds[21], startTime: new Date(today.getTime() + 18 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 24 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 3.6, createdAt: now },
+
+    // ליווי
+    { id: generateId(), missionId: missionIds.escort, soldierId: soldierIds[16], startTime: new Date(today.getTime() + 9 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 13 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 3.2, createdAt: now },
+    { id: generateId(), missionId: missionIds.escort, soldierId: soldierIds[24], startTime: new Date(today.getTime() + 9 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 13 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 3.2, createdAt: now },
+    { id: generateId(), missionId: missionIds.escort, soldierId: soldierIds[28], startTime: new Date(today.getTime() + 9 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 13 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 3.2, createdAt: now },
+
+    // פיקוד
+    { id: generateId(), missionId: missionIds.command, soldierId: soldierIds[22], startTime: new Date(today.getTime() + 6 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 18 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 7.2, createdAt: now },
+    { id: generateId(), missionId: missionIds.command, soldierId: soldierIds[31], startTime: new Date(today.getTime() + 18 * 60 * 60 * 1000), endTime: new Date(today.getTime() + 30 * 60 * 60 * 1000), status: 'scheduled', fairnessPoints: 7.2, createdAt: now },
+  ];
+
+  await db.shifts.bulkAdd(shifts);
+
+  console.log('Database seeded successfully with extended data');
+  } finally {
+    seedingInProgress = false;
+  }
 }
 
 // Clear all data (for testing/reset)

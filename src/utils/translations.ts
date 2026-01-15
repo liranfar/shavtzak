@@ -29,12 +29,6 @@ export const labels = {
     soldier: 'חייל',
   },
 
-  // Mission types
-  missionTypes: {
-    A_continuous: 'משמרת רציפה (24/7)',
-    C_adhoc: 'משימה מיידית',
-  },
-
   // Shift status
   shiftStatus: {
     scheduled: 'מתוכנן',
@@ -75,7 +69,6 @@ export const labels = {
     platoon: 'מחלקה',
     squad: 'כיתה',
     missionName: 'שם משימה',
-    missionType: 'סוג משימה',
     intensity: 'עוצמה',
     requiredSoldiers: 'מספר חיילים נדרש',
     startTime: 'שעת התחלה',
@@ -120,9 +113,4 @@ export function getStatusLabel(status: string): string {
 // Helper function for role labels
 export function getRoleLabel(role: string): string {
   return labels.roles[role as keyof typeof labels.roles] || role;
-}
-
-// Helper function for mission type labels
-export function getMissionTypeLabel(type: string): string {
-  return labels.missionTypes[type as keyof typeof labels.missionTypes] || type;
 }
