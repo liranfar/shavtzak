@@ -66,7 +66,7 @@ export interface Squad {
 
 // Validation types
 export type AlertType = 'error' | 'warning' | 'info';
-export type AlertCode = 'DUPLICATE' | 'REST_VIOLATION' | 'UNAVAILABLE';
+export type AlertCode = 'DUPLICATE' | 'REST_VIOLATION' | 'REST_VIOLATION_CRITICAL' | 'UNAVAILABLE';
 
 export interface ValidationAlert {
   type: AlertType;

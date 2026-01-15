@@ -296,7 +296,7 @@ export function ShiftAssignmentModal({
                 <span className="text-slate-400 font-normal">({platoonSoldiers.length})</span>
               </h4>
               <div className="space-y-1">
-                {platoonSoldiers.map(({ soldier, score, hasConflict, hasRestViolation }) => {
+                {platoonSoldiers.map(({ soldier, score, hasConflict, restViolationType }) => {
                   const isSelected = selectedSoldierIds.has(soldier.id);
                   const isUnavailable = soldier.status !== 'available';
                   const isDisabled = hasConflict || isUnavailable;
@@ -345,7 +345,13 @@ export function ShiftAssignmentModal({
                               תפוס
                             </span>
                           )}
-                          {hasRestViolation && !hasConflict && !isUnavailable && (
+                          {restViolationType === 'error' && !hasConflict && !isUnavailable && (
+                            <span className="flex items-center gap-1 text-xs text-red-600">
+                              <AlertCircle className="w-3 h-3" />
+                              מנוחה קריטית
+                            </span>
+                          )}
+                          {restViolationType === 'warning' && !hasConflict && !isUnavailable && (
                             <span className="flex items-center gap-1 text-xs text-orange-600">
                               <AlertTriangle className="w-3 h-3" />
                               מנוחה

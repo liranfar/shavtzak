@@ -143,6 +143,7 @@ export function suggestSoldiersForShift(
   score: number;
   hasConflict: boolean;
   hasRestViolation: boolean;
+  restViolationType: 'error' | 'warning' | null;
 }> {
   // If platoonId is null, show all soldiers; otherwise filter by platoon
   const filteredSoldiers = platoonId
@@ -163,17 +164,36 @@ export function suggestSoldiersForShift(
           )
       );
 
-      // Check for rest violations
+      // Check for rest violations based on previous shift duration
       const previousShift = findPreviousShiftForSoldier(soldier.id, startTime, existingShifts);
-      const hasRestViolation = previousShift
-        ? differenceInHours(startTime, new Date(previousShift.endTime)) < 8
-        : false;
+      let hasRestViolation = false;
+      let restViolationType: 'error' | 'warning' | null = null;
+
+      if (previousShift) {
+        const restHours = differenceInHours(startTime, new Date(previousShift.endTime));
+        const previousShiftDuration = differenceInHours(
+          new Date(previousShift.endTime),
+          new Date(previousShift.startTime)
+        );
+        const minimumRequired = Math.max(previousShiftDuration, 1);
+
+        if (restHours < minimumRequired) {
+          // Critical: rest is less than previous shift duration
+          hasRestViolation = true;
+          restViolationType = 'error';
+        } else if (restHours < 8) {
+          // Warning: rest is between shift duration and 8 hours
+          hasRestViolation = true;
+          restViolationType = 'warning';
+        }
+      }
 
       return {
         soldier,
         score: soldier.fairnessScore,
         hasConflict,
         hasRestViolation,
+        restViolationType,
       };
     })
     .sort((a, b) => {

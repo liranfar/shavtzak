@@ -36,29 +36,56 @@ export function validateShiftAssignment(
     });
   }
 
-  // 2. Check 8/8 rest rule - find previous shift
+  // 2. Check rest rule based on previous shift duration
   const previousShift = findPreviousShift(soldierId, startTime, existingShifts, excludeShiftId);
   if (previousShift) {
     const restHours = differenceInHours(startTime, new Date(previousShift.endTime));
-    if (restHours < REST_RULES.minimumRestHours) {
+    const previousShiftDuration = differenceInHours(
+      new Date(previousShift.endTime),
+      new Date(previousShift.startTime)
+    );
+    const minimumRequired = Math.max(previousShiftDuration, 1); // At least 1 hour
+
+    if (restHours < minimumRequired) {
+      // Critical: rest is less than the previous shift duration
+      alerts.push({
+        type: 'error',
+        code: 'REST_VIOLATION_CRITICAL',
+        message: `מנוחה קריטית! (${restHours} שעות, נדרש לפחות ${minimumRequired})`,
+        soldierIds: [soldierId],
+      });
+    } else if (restHours < REST_RULES.minimumRestHours) {
+      // Warning: rest is between shift duration and 8 hours
       alerts.push({
         type: 'warning',
         code: 'REST_VIOLATION',
-        message: `${labels.validation.restViolation} (${restHours} שעות)`,
+        message: `${labels.validation.restViolation} (${restHours} שעות מתוך ${REST_RULES.minimumRestHours} מומלצות)`,
         soldierIds: [soldierId],
       });
     }
   }
 
-  // 3. Check next shift for rest violation
+  // 3. Check next shift for rest violation (current shift duration determines required rest)
   const nextShift = findNextShift(soldierId, endTime, existingShifts, excludeShiftId);
   if (nextShift) {
     const restHours = differenceInHours(new Date(nextShift.startTime), endTime);
-    if (restHours < REST_RULES.minimumRestHours) {
+    const currentShiftDuration = differenceInHours(endTime, startTime);
+    const minimumRequired = Math.max(currentShiftDuration, 1); // At least 1 hour
+
+    if (restHours < minimumRequired) {
+      // Critical: rest until next shift is less than current shift duration
+      alerts.push({
+        type: 'error',
+        code: 'REST_VIOLATION_CRITICAL',
+        message: `מנוחה קריטית עד משמרת הבאה! (${restHours} שעות, נדרש לפחות ${minimumRequired})`,
+        soldierIds: [soldierId],
+      });
+    } else if (restHours < REST_RULES.minimumRestHours) {
+      // Warning: rest is between shift duration and 8 hours
       alerts.push({
         type: 'warning',
         code: 'REST_VIOLATION',
-        message: `${labels.validation.restViolation} (${restHours} שעות עד משמרת הבאה)`,
+        message: `${labels.validation.restViolation} (${restHours} שעות עד משמרת הבאה מתוך ${REST_RULES.minimumRestHours} מומלצות)`,
         soldierIds: [soldierId],
       });
     }
