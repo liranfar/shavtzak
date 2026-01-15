@@ -58,7 +58,7 @@ export function ShiftAssignmentModal({
       existingShifts,
       startTime,
       endTime,
-      50 // Show all
+      9999 // Show all soldiers
     );
   }, [soldiers, existingShifts, startTime, endTime]);
 
