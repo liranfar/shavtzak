@@ -55,8 +55,10 @@ export function SoldiersPage() {
       soldier.personalNumber.includes(searchTerm);
     const matchesStatus =
       statusFilter === 'all' || soldier.status === statusFilter;
+    // Show soldier if: no platoon filter, matches current platoon, or soldier has no valid platoon (orphaned)
+    const soldierPlatoonExists = platoons.some(p => p.id === soldier.platoonId);
     const matchesPlatoon =
-      !currentPlatoonId || soldier.platoonId === currentPlatoonId;
+      !currentPlatoonId || soldier.platoonId === currentPlatoonId || !soldierPlatoonExists;
     return matchesSearch && matchesStatus && matchesPlatoon;
   });
 
@@ -104,12 +106,12 @@ export function SoldiersPage() {
 
   const getSquadName = (squadId: string) => {
     const squad = squads.find((s) => s.id === squadId);
-    return squad?.name || '';
+    return squad?.name || 'ללא כיתה';
   };
 
   const getPlatoonName = (platoonId: string) => {
     const platoon = platoons.find((p) => p.id === platoonId);
-    return platoon?.name || '';
+    return platoon?.name || 'ללא מחלקה';
   };
 
   const toggleCertificate = (certId: string) => {
