@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, CalendarDays, Users, Target, X } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, BarChart3, Users, Target, X } from 'lucide-react';
 import { labels } from '../../utils/translations';
 import clsx from 'clsx';
 
@@ -11,6 +11,7 @@ interface SidebarProps {
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: labels.dashboard },
   { to: '/schedule', icon: CalendarDays, label: labels.schedule },
+  { to: '/summary', icon: BarChart3, label: labels.summary },
   { to: '/soldiers', icon: Users, label: labels.soldiers },
   { to: '/missions', icon: Target, label: labels.missions },
 ];

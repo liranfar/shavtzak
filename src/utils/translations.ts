@@ -8,6 +8,7 @@ export const labels = {
   // Navigation
   dashboard: 'דשבורד',
   schedule: 'לוח משמרות',
+  summary: 'סיכום',
   soldiers: 'חיילים',
   missions: 'משימות',
   settings: 'הגדרות',
