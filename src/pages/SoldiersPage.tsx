@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Plus, Search, Edit2, Trash2, Settings, X, Award, Circle } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { Plus, Search, Edit2, Trash2, Settings, X, Award, Circle, Download, Upload } from 'lucide-react';
 import { useSoldierStore } from '../stores/soldierStore';
 import { usePlatoonStore } from '../stores/platoonStore';
 import { labels, getRoleLabel } from '../utils/translations';
 import { ROLE_COLORS } from '../utils/constants';
+import { soldiersToCSV, parseSoldiersCSV, downloadFile, readFileAsText } from '../utils/csvUtils';
 import type { Soldier, SoldierRole, Platoon, Squad, Certificate, SoldierStatusDef } from '../types/entities';
 import clsx from 'clsx';
 
@@ -52,6 +53,9 @@ export function SoldiersPage() {
   const [newStatusColor, setNewStatusColor] = useState('#10B981');
   const [newStatusAvailable, setNewStatusAvailable] = useState(true);
   const [selectedPlatoonForSquad, setSelectedPlatoonForSquad] = useState<string>('');
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadPlatoons();
@@ -156,12 +160,80 @@ export function SoldiersPage() {
     );
   };
 
+  const handleExportSoldiers = () => {
+    const csv = soldiersToCSV(soldiers, platoons, squads, certificates, statuses);
+    const date = new Date().toISOString().split('T')[0];
+    downloadFile(csv, `soldiers_${date}.csv`);
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const content = await readFileAsText(file);
+      const { soldiers: parsedSoldiers, errors } = parseSoldiersCSV(
+        content,
+        platoons,
+        squads,
+        certificates,
+        statuses
+      );
+
+      if (errors.length > 0) {
+        setImportErrors(errors);
+        setIsImportModalOpen(true);
+      }
+
+      if (parsedSoldiers.length > 0) {
+        for (const soldier of parsedSoldiers) {
+          await addSoldier(soldier);
+        }
+        alert(`יובאו ${parsedSoldiers.length} חיילים בהצלחה`);
+      }
+    } catch (error) {
+      alert('שגיאה בקריאת הקובץ');
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h2 className="text-2xl font-bold text-slate-900">{labels.soldiers}</h2>
         <div className="flex gap-2">
+          <button
+            onClick={handleExportSoldiers}
+            className="flex items-center gap-2 px-3 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50"
+            title="ייצוא לקובץ CSV"
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">ייצוא</span>
+          </button>
+          <button
+            onClick={handleImportClick}
+            className="flex items-center gap-2 px-3 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50"
+            title="ייבוא מקובץ CSV"
+          >
+            <Upload className="w-4 h-4" />
+            <span className="hidden sm:inline">ייבוא</span>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.txt"
+            onChange={handleFileChange}
+            className="hidden"
+          />
           <button
             onClick={() => setIsManageModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50"
@@ -994,6 +1066,46 @@ export function SoldiersPage() {
                   setNewStatusName('');
                   setNewStatusColor('#10B981');
                   setNewStatusAvailable(true);
+                }}
+                className="w-full px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
+              >
+                סגור
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Errors Modal */}
+      {isImportModalOpen && importErrors.length > 0 && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">שגיאות בייבוא</h3>
+              <button
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setImportErrors([]);
+                }}
+                className="p-1 hover:bg-slate-100 rounded"
+              >
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            <div className="px-6 py-4 max-h-80 overflow-y-auto">
+              <ul className="space-y-2">
+                {importErrors.map((error, index) => (
+                  <li key={index} className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">
+                    {error}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="px-6 py-4 border-t border-slate-200">
+              <button
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setImportErrors([]);
                 }}
                 className="w-full px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
               >
