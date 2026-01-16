@@ -34,7 +34,6 @@ export interface SoldierStatusDef {
 export interface Mission {
   id: string;
   name: string;
-  intensity: number; // 1.0 = active, 0.4 = standby
   requiredSoldiers: number;
   requiredCertificateIds: string[]; // Required certificates for this mission
   platoonId: string; // assigned platoon

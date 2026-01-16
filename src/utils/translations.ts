@@ -69,7 +69,6 @@ export const labels = {
     platoon: 'מחלקה',
     squad: 'כיתה',
     missionName: 'שם משימה',
-    intensity: 'עוצמה',
     requiredSoldiers: 'מספר חיילים נדרש',
     startTime: 'שעת התחלה',
     endTime: 'שעת סיום',

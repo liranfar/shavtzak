@@ -3,7 +3,6 @@ import { Plus, Edit2, Trash2, Award } from 'lucide-react';
 import { useMissionStore } from '../stores/missionStore';
 import { usePlatoonStore } from '../stores/platoonStore';
 import { labels } from '../utils/translations';
-import { MISSION_INTENSITY } from '../utils/constants';
 import type { Mission } from '../types/entities';
 import clsx from 'clsx';
 
@@ -60,7 +59,6 @@ export function MissionsPage() {
 
     const missionData = {
       name: formData.get('name') as string,
-      intensity: parseFloat(formData.get('intensity') as string),
       requiredSoldiers: parseInt(formData.get('requiredSoldiers') as string, 10),
       requiredCertificateIds: selectedCertificateIds,
       platoonId: currentPlatoonId || '',
@@ -99,9 +97,6 @@ export function MissionsPage() {
                   {labels.form.missionName}
                 </th>
                 <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
-                  {labels.form.intensity}
-                </th>
-                <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
                   {labels.form.requiredSoldiers}
                 </th>
                 <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
@@ -117,9 +112,6 @@ export function MissionsPage() {
                 <tr key={mission.id} className="border-b border-slate-100 hover:bg-slate-50">
                   <td className="px-4 py-3 text-sm font-medium text-slate-900">
                     {mission.name}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">
-                    {mission.intensity}
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-600">
                     {mission.requiredSoldiers}
@@ -190,23 +182,6 @@ export function MissionsPage() {
                   defaultValue={editingMission?.name}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  {labels.form.intensity}
-                </label>
-                <select
-                  name="intensity"
-                  required
-                  defaultValue={editingMission?.intensity || MISSION_INTENSITY.active}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value={MISSION_INTENSITY.active}>פעיל (1.0)</option>
-                  <option value={MISSION_INTENSITY.standby}>כוננות (0.4)</option>
-                  <option value={0.6}>בינוני (0.6)</option>
-                  <option value={0.8}>גבוה (0.8)</option>
-                </select>
               </div>
 
               <div>

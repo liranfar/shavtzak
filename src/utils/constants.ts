@@ -6,12 +6,6 @@ export const REST_RULES = {
   shiftDurationHours: 8,     // Standard shift duration
 } as const;
 
-// Mission intensity values
-export const MISSION_INTENSITY = {
-  active: 1.0,               // Active mission
-  standby: 0.4,              // Standby/cordon mission
-} as const;
-
 // Time slot options for the schedule grid
 export const TIME_SLOT_OPTIONS = [
   { value: 1, label: '1 שעה' },

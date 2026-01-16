@@ -319,12 +319,12 @@ export async function seedDatabase(): Promise<void> {
   };
 
   const sampleMissions: Mission[] = [
-    { id: missionIds.gate, name: 'שמירה - שער ראשי', intensity: 1.0, requiredSoldiers: 2, requiredCertificateIds: [certIds.marksman], platoonId: platoonIds.aleph, createdAt: now, updatedAt: now },
-    { id: missionIds.patrol, name: 'סיור היקפי', intensity: 0.8, requiredSoldiers: 2, requiredCertificateIds: [certIds.driver], platoonId: platoonIds.aleph, createdAt: now, updatedAt: now },
-    { id: missionIds.standby, name: 'כוננות', intensity: 0.4, requiredSoldiers: 4, requiredCertificateIds: [], platoonId: platoonIds.aleph, createdAt: now, updatedAt: now },
-    { id: missionIds.observation, name: 'תצפית', intensity: 0.6, requiredSoldiers: 1, requiredCertificateIds: [], platoonId: platoonIds.bet, createdAt: now, updatedAt: now },
-    { id: missionIds.escort, name: 'ליווי', intensity: 0.8, requiredSoldiers: 3, requiredCertificateIds: [certIds.driver], platoonId: platoonIds.bet, createdAt: now, updatedAt: now },
-    { id: missionIds.command, name: 'פיקוד', intensity: 0.6, requiredSoldiers: 1, requiredCertificateIds: [certIds.commander], platoonId: platoonIds.gimel, createdAt: now, updatedAt: now },
+    { id: missionIds.gate, name: 'שמירה - שער ראשי', requiredSoldiers: 2, requiredCertificateIds: [certIds.marksman], platoonId: platoonIds.aleph, createdAt: now, updatedAt: now },
+    { id: missionIds.patrol, name: 'סיור היקפי', requiredSoldiers: 2, requiredCertificateIds: [certIds.driver], platoonId: platoonIds.aleph, createdAt: now, updatedAt: now },
+    { id: missionIds.standby, name: 'כוננות', requiredSoldiers: 4, requiredCertificateIds: [], platoonId: platoonIds.aleph, createdAt: now, updatedAt: now },
+    { id: missionIds.observation, name: 'תצפית', requiredSoldiers: 1, requiredCertificateIds: [], platoonId: platoonIds.bet, createdAt: now, updatedAt: now },
+    { id: missionIds.escort, name: 'ליווי', requiredSoldiers: 3, requiredCertificateIds: [certIds.driver], platoonId: platoonIds.bet, createdAt: now, updatedAt: now },
+    { id: missionIds.command, name: 'פיקוד', requiredSoldiers: 1, requiredCertificateIds: [certIds.commander], platoonId: platoonIds.gimel, createdAt: now, updatedAt: now },
   ];
 
   await db.missions.bulkAdd(sampleMissions);
