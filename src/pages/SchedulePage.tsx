@@ -20,7 +20,6 @@ import { ShiftAssignmentModal } from '../components/schedule/ShiftAssignmentModa
 import { ShiftCell } from '../components/schedule/ShiftCell';
 import { SoldierDragOverlay } from '../components/schedule/SoldierDragOverlay';
 import { validateDaySchedule } from '../services/validationService';
-import { calculateShiftScore } from '../services/fairnessCalculator';
 import { labels } from '../utils/translations';
 import type { Mission, Shift } from '../types/entities';
 import clsx from 'clsx';
@@ -35,8 +34,8 @@ for (let h = 0; h < 24; h++) {
 export function SchedulePage() {
   const { missions, loadMissions } = useMissionStore();
   const { shifts, selectedDate, setSelectedDate, loadShifts, addShift, deleteShift } = useScheduleStore();
-  const { soldiers, loadSoldiers, updateFairnessScore } = useSoldierStore();
-  const { platoons, loadPlatoons, loadSquads, certificates, loadCertificates } = usePlatoonStore();
+  const { soldiers, loadSoldiers } = useSoldierStore();
+  const { platoons, loadPlatoons, loadSquads, certificates, loadCertificates, statuses, loadStatuses } = usePlatoonStore();
 
   const [modalData, setModalData] = useState<{
     mission: Mission;
@@ -56,10 +55,11 @@ export function SchedulePage() {
     loadPlatoons();
     loadSquads();
     loadCertificates();
+    loadStatuses();
     loadMissions();
     loadSoldiers();
     loadShifts();
-  }, [loadPlatoons, loadSquads, loadCertificates, loadMissions, loadSoldiers, loadShifts]);
+  }, [loadPlatoons, loadSquads, loadCertificates, loadStatuses, loadMissions, loadSoldiers, loadShifts]);
 
   // Show all missions - don't filter by currentPlatoonId
   const filteredMissions = missions;
@@ -152,33 +152,19 @@ export function SchedulePage() {
     if (!modalData) return;
 
     for (const soldierId of soldierIds) {
-      const shift = await addShift({
+      await addShift({
         missionId: modalData.mission.id,
         soldierId,
         startTime,
         endTime,
         status: 'scheduled',
       });
-
-      // Calculate and update fairness score
-      const score = calculateShiftScore(shift, modalData.mission);
-      await updateFairnessScore(soldierId, score);
     }
 
     setModalData(null);
   };
 
   const handleRemoveShift = async (shiftId: string) => {
-    const shift = shifts.find((s) => s.id === shiftId);
-    if (!shift) return;
-
-    // Subtract fairness points
-    const mission = missions.find((m) => m.id === shift.missionId);
-    if (mission) {
-      const score = calculateShiftScore(shift, mission);
-      await updateFairnessScore(shift.soldierId, -score);
-    }
-
     await deleteShift(shiftId);
   };
 
@@ -211,16 +197,13 @@ export function SchedulePage() {
         const startTime = setHours(startOfDay(selectedDate), targetHour);
         const endTime = new Date(startTime.getTime() + originalDuration);
 
-        const newShift = await addShift({
+        await addShift({
           missionId: targetMissionId,
           soldierId: shift.soldierId,
           startTime,
           endTime,
           status: 'scheduled',
         });
-
-        const score = calculateShiftScore(newShift, mission);
-        await updateFairnessScore(shift.soldierId, score);
       }
     }
   };
@@ -442,6 +425,7 @@ export function SchedulePage() {
           soldiers={soldiers}
           platoons={platoons}
           certificates={certificates}
+          statuses={statuses}
           existingShifts={shifts}
           onAssign={handleAssignSoldiers}
           onClose={() => setModalData(null)}

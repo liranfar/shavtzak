@@ -81,7 +81,6 @@ export const labels = {
     availableSoldiers: 'חיילים זמינים',
     activeMissions: 'משימות פעילות',
     todayShifts: 'משמרות היום',
-    fairnessScore: 'ציון שוויון',
     weeklyLoad: 'עומס שבועי',
   },
 

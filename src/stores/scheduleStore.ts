@@ -98,7 +98,6 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     const shift: Shift = {
       ...input,
       id: generateId(),
-      fairnessPoints: 0, // Will be calculated by fairness service
       createdAt: now,
     };
 

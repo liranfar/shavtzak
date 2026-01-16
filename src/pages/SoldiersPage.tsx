@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search, Edit2, Trash2, Settings, X, Award } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Settings, X, Award, Circle } from 'lucide-react';
 import { useSoldierStore } from '../stores/soldierStore';
 import { usePlatoonStore } from '../stores/platoonStore';
-import { labels, getStatusLabel, getRoleLabel } from '../utils/translations';
-import { STATUS_COLORS, ROLE_COLORS } from '../utils/constants';
-import type { Soldier, SoldierStatus, SoldierRole, Platoon, Squad, Certificate } from '../types/entities';
+import { labels, getRoleLabel } from '../utils/translations';
+import { ROLE_COLORS } from '../utils/constants';
+import type { Soldier, SoldierRole, Platoon, Squad, Certificate, SoldierStatusDef } from '../types/entities';
 import clsx from 'clsx';
 
 export function SoldiersPage() {
@@ -17,6 +17,8 @@ export function SoldiersPage() {
     platoons,
     certificates,
     loadCertificates,
+    statuses,
+    loadStatuses,
     addPlatoon,
     updatePlatoon,
     deletePlatoon,
@@ -26,10 +28,13 @@ export function SoldiersPage() {
     addCertificate,
     updateCertificate,
     deleteCertificate,
+    addStatus,
+    updateStatus,
+    deleteStatus,
   } = usePlatoonStore();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<SoldierStatus | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [platoonFilter, setPlatoonFilter] = useState<string>('all');
   const [certificateFilter, setCertificateFilter] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -39,17 +44,22 @@ export function SoldiersPage() {
   const [editingPlatoon, setEditingPlatoon] = useState<Platoon | null>(null);
   const [editingSquad, setEditingSquad] = useState<Squad | null>(null);
   const [editingCertificate, setEditingCertificate] = useState<Certificate | null>(null);
+  const [editingStatus, setEditingStatus] = useState<SoldierStatusDef | null>(null);
   const [newPlatoonName, setNewPlatoonName] = useState('');
   const [newSquadName, setNewSquadName] = useState('');
   const [newCertificateName, setNewCertificateName] = useState('');
+  const [newStatusName, setNewStatusName] = useState('');
+  const [newStatusColor, setNewStatusColor] = useState('#10B981');
+  const [newStatusAvailable, setNewStatusAvailable] = useState(true);
   const [selectedPlatoonForSquad, setSelectedPlatoonForSquad] = useState<string>('');
 
   useEffect(() => {
     loadPlatoons();
     loadSquads();
     loadCertificates();
+    loadStatuses();
     loadSoldiers();
-  }, [loadPlatoons, loadSquads, loadCertificates, loadSoldiers]);
+  }, [loadPlatoons, loadSquads, loadCertificates, loadStatuses, loadSoldiers]);
 
   const filteredSoldiers = soldiers.filter((soldier) => {
     // Search by name, personal number, or phone
@@ -60,7 +70,7 @@ export function SoldiersPage() {
 
     // Status filter
     const matchesStatus =
-      statusFilter === 'all' || soldier.status === statusFilter;
+      statusFilter === 'all' || soldier.statusId === statusFilter;
 
     // Platoon filter - explicit filter only, ignore global currentPlatoonId
     const soldierPlatoonExists = platoons.some(p => p.id === soldier.platoonId);
@@ -96,6 +106,14 @@ export function SoldiersPage() {
     }
   };
 
+  const getStatusName = (statusId: string) => {
+    return statuses.find((s) => s.id === statusId)?.name || 'לא ידוע';
+  };
+
+  const getStatusColor = (statusId: string) => {
+    return statuses.find((s) => s.id === statusId)?.color || '#6B7280';
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -105,7 +123,7 @@ export function SoldiersPage() {
       personalNumber: formData.get('personalNumber') as string,
       phoneNumber: formData.get('phoneNumber') as string,
       role: formData.get('role') as SoldierRole,
-      status: formData.get('status') as SoldierStatus,
+      statusId: formData.get('statusId') as string,
       platoonId: formData.get('platoonId') as string,
       squadId: formData.get('squadId') as string,
       certificateIds: selectedCertificateIds,
@@ -177,14 +195,15 @@ export function SoldiersPage() {
 
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as SoldierStatus | 'all')}
+            onChange={(e) => setStatusFilter(e.target.value)}
             className="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">סטטוס - הכל</option>
-            <option value="available">{labels.status.available}</option>
-            <option value="home">{labels.status.home}</option>
-            <option value="task_locked">{labels.status.task_locked}</option>
-            <option value="sick">{labels.status.sick}</option>
+            {statuses.map((status) => (
+              <option key={status.id} value={status.id}>
+                {status.name}
+              </option>
+            ))}
           </select>
 
           <select
@@ -266,9 +285,6 @@ export function SoldiersPage() {
                   הסמכות
                 </th>
                 <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
-                  {labels.dashboard_labels.fairnessScore}
-                </th>
-                <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
                   פעולות
                 </th>
               </tr>
@@ -291,8 +307,14 @@ export function SoldiersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={clsx('px-2 py-1 rounded text-xs font-medium', STATUS_COLORS[soldier.status])}>
-                      {getStatusLabel(soldier.status)}
+                    <span
+                      className="px-2 py-1 rounded text-xs font-medium"
+                      style={{
+                        backgroundColor: `${getStatusColor(soldier.statusId)}20`,
+                        color: getStatusColor(soldier.statusId),
+                      }}
+                    >
+                      {getStatusName(soldier.statusId)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-600">
@@ -321,9 +343,6 @@ export function SoldiersPage() {
                     ) : (
                       <span className="text-slate-400">-</span>
                     )}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">
-                    {soldier.fairnessScore.toFixed(1)}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1">
@@ -424,15 +443,16 @@ export function SoldiersPage() {
                   {labels.form.status}
                 </label>
                 <select
-                  name="status"
+                  name="statusId"
                   required
-                  defaultValue={editingSoldier?.status || 'available'}
+                  defaultValue={editingSoldier?.statusId || statuses[0]?.id}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="available">{labels.status.available}</option>
-                  <option value="home">{labels.status.home}</option>
-                  <option value="task_locked">{labels.status.task_locked}</option>
-                  <option value="sick">{labels.status.sick}</option>
+                  {statuses.map((status) => (
+                    <option key={status.id} value={status.id}>
+                      {status.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -525,16 +545,20 @@ export function SoldiersPage() {
           <div className="bg-white rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900">ניהול מחלקות, כיתות והסמכות</h3>
+              <h3 className="text-lg font-semibold text-slate-900">ניהול מחלקות, כיתות, הסמכות וסטטוסים</h3>
               <button
                 onClick={() => {
                   setIsManageModalOpen(false);
                   setEditingPlatoon(null);
                   setEditingSquad(null);
                   setEditingCertificate(null);
+                  setEditingStatus(null);
                   setNewPlatoonName('');
                   setNewSquadName('');
                   setNewCertificateName('');
+                  setNewStatusName('');
+                  setNewStatusColor('#10B981');
+                  setNewStatusAvailable(true);
                 }}
                 className="p-2 hover:bg-slate-100 rounded-lg"
               >
@@ -834,6 +858,125 @@ export function SoldiersPage() {
                   )}
                 </div>
               </div>
+
+              {/* Statuses Section */}
+              <div>
+                <h4 className="text-md font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                  <Circle className="w-4 h-4" />
+                  סטטוסים
+                </h4>
+
+                {/* Add Status Form */}
+                <div className="flex gap-2 mb-3 flex-wrap">
+                  <input
+                    type="text"
+                    value={newStatusName}
+                    onChange={(e) => setNewStatusName(e.target.value)}
+                    placeholder="שם סטטוס חדש"
+                    className="flex-1 min-w-[150px] px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <input
+                    type="color"
+                    value={newStatusColor}
+                    onChange={(e) => setNewStatusColor(e.target.value)}
+                    className="w-12 h-10 border border-slate-200 rounded-lg cursor-pointer"
+                    title="בחר צבע"
+                  />
+                  <label className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg">
+                    <input
+                      type="checkbox"
+                      checked={newStatusAvailable}
+                      onChange={(e) => setNewStatusAvailable(e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm">זמין לשיבוץ</span>
+                  </label>
+                  <button
+                    onClick={async () => {
+                      if (newStatusName.trim()) {
+                        await addStatus(newStatusName.trim(), newStatusColor, newStatusAvailable);
+                        setNewStatusName('');
+                        setNewStatusColor('#10B981');
+                        setNewStatusAvailable(true);
+                      }
+                    }}
+                    disabled={!newStatusName.trim()}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Statuses List */}
+                <div className="space-y-2">
+                  {statuses.map((status) => (
+                    <div
+                      key={status.id}
+                      className="flex items-center gap-2 p-2 rounded-lg border"
+                      style={{
+                        backgroundColor: `${status.color}15`,
+                        borderColor: `${status.color}40`,
+                      }}
+                    >
+                      {editingStatus?.id === status.id ? (
+                        <input
+                          type="text"
+                          defaultValue={status.name}
+                          onBlur={(e) => {
+                            if (e.target.value.trim() && e.target.value !== status.name) {
+                              updateStatus(status.id, { name: e.target.value.trim() });
+                            }
+                            setEditingStatus(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.currentTarget.blur();
+                            } else if (e.key === 'Escape') {
+                              setEditingStatus(null);
+                            }
+                          }}
+                          autoFocus
+                          className="flex-1 px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      ) : (
+                        <>
+                          <div
+                            className="w-4 h-4 rounded-full shrink-0"
+                            style={{ backgroundColor: status.color }}
+                          />
+                          <span className="flex-1 text-sm font-medium" style={{ color: status.color }}>
+                            {status.name}
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {status.isAvailable ? '(זמין לשיבוץ)' : '(לא זמין)'}
+                          </span>
+                          <button
+                            onClick={() => setEditingStatus(status)}
+                            className="p-1.5 hover:bg-white/50 rounded"
+                            title="ערוך"
+                          >
+                            <Edit2 className="w-4 h-4 text-slate-500" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`האם למחוק את הסטטוס "${status.name}"?`)) {
+                                deleteStatus(status.id);
+                              }
+                            }}
+                            className="p-1.5 hover:bg-red-50 rounded"
+                            title="מחק"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  {statuses.length === 0 && (
+                    <p className="text-sm text-slate-500 py-2">אין סטטוסים מוגדרים</p>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Footer */}
@@ -844,9 +987,13 @@ export function SoldiersPage() {
                   setEditingPlatoon(null);
                   setEditingSquad(null);
                   setEditingCertificate(null);
+                  setEditingStatus(null);
                   setNewPlatoonName('');
                   setNewSquadName('');
                   setNewCertificateName('');
+                  setNewStatusName('');
+                  setNewStatusColor('#10B981');
+                  setNewStatusAvailable(true);
                 }}
                 className="w-full px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
               >

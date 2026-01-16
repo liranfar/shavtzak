@@ -2,11 +2,10 @@ import { useState, useMemo } from 'react';
 import { X, AlertTriangle, AlertCircle, Clock, User, Users, Check, Award, Info, Search } from 'lucide-react';
 import { format, addMinutes } from 'date-fns';
 import { he } from 'date-fns/locale';
-import type { Mission, Soldier, Shift, Platoon, Certificate } from '../../types/entities';
+import type { Mission, Soldier, Shift, Platoon, Certificate, SoldierStatusDef } from '../../types/entities';
 import { suggestSoldiersForShift } from '../../services/fairnessCalculator';
 import { validateShiftAssignment } from '../../services/validationService';
 import { labels } from '../../utils/translations';
-import { STATUS_COLORS } from '../../utils/constants';
 import clsx from 'clsx';
 
 // Duration options in minutes
@@ -28,6 +27,7 @@ interface ShiftAssignmentModalProps {
   soldiers: Soldier[];
   platoons: Platoon[];
   certificates: Certificate[];
+  statuses: SoldierStatusDef[];
   existingShifts: Shift[];
   onAssign: (soldierIds: string[], startTime: Date, endTime: Date) => void;
   onClose: () => void;
@@ -39,6 +39,7 @@ export function ShiftAssignmentModal({
   soldiers,
   platoons,
   certificates,
+  statuses,
   existingShifts,
   onAssign,
   onClose,
@@ -50,7 +51,7 @@ export function ShiftAssignmentModal({
   const startTime = initialStartTime;
   const endTime = addMinutes(startTime, durationMinutes);
 
-  // Get suggested soldiers sorted by fairness (show all platoons)
+  // Get suggested soldiers sorted by availability (show all platoons)
   const suggestions = useMemo(() => {
     return suggestSoldiersForShift(
       soldiers,
@@ -161,6 +162,18 @@ export function ShiftAssignmentModal({
   const getCertificateName = (certId: string) => {
     const cert = certificates.find(c => c.id === certId);
     return cert?.name || '';
+  };
+
+  const getStatusName = (statusId: string) => {
+    return statuses.find(s => s.id === statusId)?.name || 'לא ידוע';
+  };
+
+  const getStatusColor = (statusId: string) => {
+    return statuses.find(s => s.id === statusId)?.color || '#6B7280';
+  };
+
+  const isStatusAvailable = (statusId: string) => {
+    return statuses.find(s => s.id === statusId)?.isAvailable ?? false;
   };
 
   const getSoldierCertificateNames = (soldier: Soldier): string[] => {
@@ -296,9 +309,9 @@ export function ShiftAssignmentModal({
                 <span className="text-slate-400 font-normal">({platoonSoldiers.length})</span>
               </h4>
               <div className="space-y-1">
-                {platoonSoldiers.map(({ soldier, score, hasConflict, restViolationType }) => {
+                {platoonSoldiers.map(({ soldier, hasConflict, restViolationType }) => {
                   const isSelected = selectedSoldierIds.has(soldier.id);
-                  const isUnavailable = soldier.status !== 'available';
+                  const isUnavailable = !isStatusAvailable(soldier.statusId);
                   const isDisabled = hasConflict || isUnavailable;
                   const soldierCerts = getSoldierCertificateNames(soldier);
 
@@ -332,12 +345,13 @@ export function ShiftAssignmentModal({
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-slate-900 text-sm">{soldier.name}</span>
                           <span
-                            className={clsx(
-                              'px-1.5 py-0.5 rounded text-xs font-medium',
-                              STATUS_COLORS[soldier.status]
-                            )}
+                            className="px-1.5 py-0.5 rounded text-xs font-medium"
+                            style={{
+                              backgroundColor: `${getStatusColor(soldier.statusId)}20`,
+                              color: getStatusColor(soldier.statusId),
+                            }}
                           >
-                            {labels.status[soldier.status]}
+                            {getStatusName(soldier.statusId)}
                           </span>
                           {hasConflict && (
                             <span className="flex items-center gap-1 text-xs text-red-600">
@@ -380,10 +394,6 @@ export function ShiftAssignmentModal({
                           </div>
                         )}
                       </div>
-
-                      <span className="text-xs text-slate-500">
-                        {score.toFixed(1)}
-                      </span>
                     </button>
                   );
                 })}

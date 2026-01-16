@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { db, generateId } from '../db/database';
-import type { Soldier, CreateSoldierInput, UpdateSoldierInput, SoldierStatus } from '../types/entities';
+import type { Soldier, CreateSoldierInput, UpdateSoldierInput } from '../types/entities';
 
 interface SoldierState {
   soldiers: Soldier[];
@@ -12,11 +12,10 @@ interface SoldierState {
   addSoldier: (input: CreateSoldierInput) => Promise<Soldier>;
   updateSoldier: (id: string, input: UpdateSoldierInput) => Promise<void>;
   deleteSoldier: (id: string) => Promise<void>;
-  updateSoldierStatus: (id: string, status: SoldierStatus) => Promise<void>;
-  updateFairnessScore: (id: string, points: number) => Promise<void>;
+  updateSoldierStatusId: (id: string, statusId: string) => Promise<void>;
   getSoldiersByPlatoon: (platoonId: string) => Soldier[];
   getSoldiersBySquad: (squadId: string) => Soldier[];
-  getAvailableSoldiers: (platoonId: string) => Soldier[];
+  getSoldiersByStatusIds: (platoonId: string, availableStatusIds: string[]) => Soldier[];
 }
 
 export const useSoldierStore = create<SoldierState>((set, get) => ({
@@ -39,7 +38,6 @@ export const useSoldierStore = create<SoldierState>((set, get) => ({
     const soldier: Soldier = {
       ...input,
       id: generateId(),
-      fairnessScore: 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -66,24 +64,11 @@ export const useSoldierStore = create<SoldierState>((set, get) => ({
     }));
   },
 
-  updateSoldierStatus: async (id: string, status: SoldierStatus) => {
-    await db.soldiers.update(id, { status, updatedAt: new Date() });
+  updateSoldierStatusId: async (id: string, statusId: string) => {
+    await db.soldiers.update(id, { statusId, updatedAt: new Date() });
     set((state) => ({
       soldiers: state.soldiers.map((s) =>
-        s.id === id ? { ...s, status, updatedAt: new Date() } : s
-      ),
-    }));
-  },
-
-  updateFairnessScore: async (id: string, points: number) => {
-    const soldier = get().soldiers.find((s) => s.id === id);
-    if (!soldier) return;
-
-    const newScore = soldier.fairnessScore + points;
-    await db.soldiers.update(id, { fairnessScore: newScore, updatedAt: new Date() });
-    set((state) => ({
-      soldiers: state.soldiers.map((s) =>
-        s.id === id ? { ...s, fairnessScore: newScore, updatedAt: new Date() } : s
+        s.id === id ? { ...s, statusId, updatedAt: new Date() } : s
       ),
     }));
   },
@@ -96,9 +81,8 @@ export const useSoldierStore = create<SoldierState>((set, get) => ({
     return get().soldiers.filter((s) => s.squadId === squadId);
   },
 
-  getAvailableSoldiers: (platoonId: string) => {
+  getSoldiersByStatusIds: (platoonId: string, availableStatusIds: string[]) => {
     return get()
-      .soldiers.filter((s) => s.platoonId === platoonId && s.status === 'available')
-      .sort((a, b) => a.fairnessScore - b.fairnessScore);
+      .soldiers.filter((s) => s.platoonId === platoonId && availableStatusIds.includes(s.statusId));
   },
 }));

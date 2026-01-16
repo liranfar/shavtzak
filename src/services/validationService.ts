@@ -11,7 +11,7 @@ export function validateShiftAssignment(
   startTime: Date,
   endTime: Date,
   existingShifts: Shift[],
-  soldier: Soldier,
+  _soldier: Soldier,
   excludeShiftId?: string
 ): ValidationResult {
   const alerts: ValidationAlert[] = [];
@@ -91,15 +91,8 @@ export function validateShiftAssignment(
     }
   }
 
-  // 4. Check soldier availability
-  if (soldier.status !== 'available') {
-    alerts.push({
-      type: 'info',
-      code: 'UNAVAILABLE',
-      message: `${labels.validation.unavailable} (${labels.status[soldier.status]})`,
-      soldierIds: [soldierId],
-    });
-  }
+  // 4. Check soldier availability (handled externally via statusId now)
+  // Note: Status availability check is done at the component level using statuses from store
 
   return {
     isValid: !alerts.some((a) => a.type === 'error'),

@@ -1,7 +1,6 @@
 // Core entity types for the Shavtzak system
 
 export type SoldierRole = 'officer' | 'nco' | 'soldier';
-export type SoldierStatus = 'available' | 'home' | 'task_locked' | 'sick';
 export type ShiftStatus = 'scheduled' | 'active' | 'completed' | 'cancelled';
 
 export interface Soldier {
@@ -10,11 +9,10 @@ export interface Soldier {
   personalNumber: string; // מספר אישי
   phoneNumber: string; // מספר טלפון
   role: SoldierRole;
-  status: SoldierStatus;
+  statusId: string; // Reference to SoldierStatusDef
   platoonId: string;
   squadId: string;
   certificateIds: string[]; // הסמכות
-  fairnessScore: number; // cumulative weekly score
   createdAt: Date;
   updatedAt: Date;
 }
@@ -22,6 +20,14 @@ export interface Soldier {
 export interface Certificate {
   id: string;
   name: string; // e.g., "קלע", "חובש", "נהג"
+  createdAt: Date;
+}
+
+export interface SoldierStatusDef {
+  id: string;
+  name: string; // e.g., "זמין", "בבית", "חולה"
+  color: string; // Hex color for display
+  isAvailable: boolean; // Whether soldier can be assigned to shifts
   createdAt: Date;
 }
 
@@ -43,7 +49,6 @@ export interface Shift {
   startTime: Date;
   endTime: Date;
   status: ShiftStatus;
-  fairnessPoints: number; // calculated score for this shift
   createdAt: Date;
 }
 
@@ -79,11 +84,11 @@ export interface ValidationResult {
 }
 
 // Form types for creating/updating entities
-export type CreateSoldierInput = Omit<Soldier, 'id' | 'fairnessScore' | 'createdAt' | 'updatedAt'>;
+export type CreateSoldierInput = Omit<Soldier, 'id' | 'createdAt' | 'updatedAt'>;
 export type UpdateSoldierInput = Partial<CreateSoldierInput>;
 
 export type CreateMissionInput = Omit<Mission, 'id' | 'createdAt' | 'updatedAt'>;
 export type UpdateMissionInput = Partial<CreateMissionInput>;
 
-export type CreateShiftInput = Omit<Shift, 'id' | 'fairnessPoints' | 'createdAt'>;
+export type CreateShiftInput = Omit<Shift, 'id' | 'createdAt'>;
 export type UpdateShiftInput = Partial<CreateShiftInput>;

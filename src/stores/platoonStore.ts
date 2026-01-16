@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import { db, generateId, generatePlatoonColor } from '../db/database';
-import type { Platoon, Squad, Certificate } from '../types/entities';
+import type { Platoon, Squad, Certificate, SoldierStatusDef } from '../types/entities';
 
 interface PlatoonState {
   platoons: Platoon[];
   squads: Squad[];
   certificates: Certificate[];
+  statuses: SoldierStatusDef[];
   currentPlatoonId: string | null;
   isLoading: boolean;
   error: string | null;
@@ -14,6 +15,7 @@ interface PlatoonState {
   loadPlatoons: () => Promise<void>;
   loadSquads: () => Promise<void>;
   loadCertificates: () => Promise<void>;
+  loadStatuses: () => Promise<void>;
   setCurrentPlatoon: (platoonId: string) => void;
 
   // Platoon CRUD
@@ -31,15 +33,22 @@ interface PlatoonState {
   updateCertificate: (id: string, name: string) => Promise<void>;
   deleteCertificate: (id: string) => Promise<void>;
 
+  // Status CRUD
+  addStatus: (name: string, color: string, isAvailable: boolean) => Promise<SoldierStatusDef>;
+  updateStatus: (id: string, updates: Partial<Omit<SoldierStatusDef, 'id' | 'createdAt'>>) => Promise<void>;
+  deleteStatus: (id: string) => Promise<void>;
+
   // Queries
   getCurrentPlatoon: () => Platoon | undefined;
   getSquadsForPlatoon: (platoonId: string) => Squad[];
+  getStatusById: (id: string) => SoldierStatusDef | undefined;
 }
 
 export const usePlatoonStore = create<PlatoonState>((set, get) => ({
   platoons: [],
   squads: [],
   certificates: [],
+  statuses: [],
   currentPlatoonId: null,
   isLoading: false,
   error: null,
@@ -68,6 +77,15 @@ export const usePlatoonStore = create<PlatoonState>((set, get) => ({
     try {
       const certificates = await db.certificates.toArray();
       set({ certificates });
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  loadStatuses: async () => {
+    try {
+      const statuses = await db.statuses.toArray();
+      set({ statuses });
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -172,5 +190,37 @@ export const usePlatoonStore = create<PlatoonState>((set, get) => ({
     set((state) => ({
       certificates: state.certificates.filter((c) => c.id !== id),
     }));
+  },
+
+  // Status CRUD
+  addStatus: async (name: string, color: string, isAvailable: boolean) => {
+    const status: SoldierStatusDef = {
+      id: generateId(),
+      name,
+      color,
+      isAvailable,
+      createdAt: new Date(),
+    };
+    await db.statuses.add(status);
+    set((state) => ({ statuses: [...state.statuses, status] }));
+    return status;
+  },
+
+  updateStatus: async (id: string, updates: Partial<Omit<SoldierStatusDef, 'id' | 'createdAt'>>) => {
+    await db.statuses.update(id, updates);
+    set((state) => ({
+      statuses: state.statuses.map((s) => (s.id === id ? { ...s, ...updates } : s)),
+    }));
+  },
+
+  deleteStatus: async (id: string) => {
+    await db.statuses.delete(id);
+    set((state) => ({
+      statuses: state.statuses.filter((s) => s.id !== id),
+    }));
+  },
+
+  getStatusById: (id: string) => {
+    return get().statuses.find((s) => s.id === id);
   },
 }));
