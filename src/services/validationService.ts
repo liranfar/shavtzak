@@ -47,9 +47,9 @@ export function validateShiftAssignment(
     const minimumRequired = Math.max(previousShiftDuration, 1); // At least 1 hour
 
     if (restHours < minimumRequired) {
-      // Critical: rest is less than the previous shift duration
+      // Critical: rest is less than the previous shift duration (warning only, doesn't block)
       alerts.push({
-        type: 'error',
+        type: 'warning',
         code: 'REST_VIOLATION_CRITICAL',
         message: `מנוחה קריטית! (${restHours} שעות, נדרש לפחות ${minimumRequired})`,
         soldierIds: [soldierId],
@@ -73,9 +73,9 @@ export function validateShiftAssignment(
     const minimumRequired = Math.max(currentShiftDuration, 1); // At least 1 hour
 
     if (restHours < minimumRequired) {
-      // Critical: rest until next shift is less than current shift duration
+      // Critical: rest until next shift is less than current shift duration (warning only, doesn't block)
       alerts.push({
-        type: 'error',
+        type: 'warning',
         code: 'REST_VIOLATION_CRITICAL',
         message: `מנוחה קריטית עד משמרת הבאה! (${restHours} שעות, נדרש לפחות ${minimumRequired})`,
         soldierIds: [soldierId],
