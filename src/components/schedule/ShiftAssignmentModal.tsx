@@ -349,10 +349,12 @@ export function ShiftAssignmentModal({
               <div className="space-y-1">
                 {platoonSoldiers.map(({ soldier, hasConflict, restViolationType }) => {
                   const isSelected = selectedSoldierIds.has(soldier.id);
-                  const isUnavailable = !isStatusAvailable(soldier.statusId);
+                  const isCurrentlyUnavailable = !isStatusAvailable(soldier.statusId);
                   const leaveWarning = getLeaveWarning(soldier);
                   const isOnLeave = leaveWarning.type === 'onLeave';
-                  const isDisabled = hasConflict || isUnavailable || isOnLeave;
+                  // Only block if on leave during the shift time, NOT for current status
+                  // Current status (like "at home") is temporary and should only show a warning for future shifts
+                  const isDisabled = hasConflict || isOnLeave;
                   const soldierCerts = getSoldierCertificateNames(soldier);
 
                   return (
@@ -367,7 +369,7 @@ export function ShiftAssignmentModal({
                           : 'border-slate-200 hover:bg-slate-50',
                         hasConflict && 'opacity-50 cursor-not-allowed bg-red-50 border-red-200',
                         isOnLeave && !hasConflict && 'opacity-50 cursor-not-allowed bg-purple-50 border-purple-200',
-                        isUnavailable && !hasConflict && !isOnLeave && 'opacity-50 cursor-not-allowed bg-slate-100 border-slate-300'
+                        isCurrentlyUnavailable && !hasConflict && !isOnLeave && !isSelected && 'bg-amber-50 border-amber-200'
                       )}
                     >
                       {/* Checkbox */}
@@ -375,8 +377,7 @@ export function ShiftAssignmentModal({
                         'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0',
                         isSelected ? 'bg-blue-500 border-blue-500' : 'border-slate-300',
                         hasConflict && 'border-red-300 bg-red-100',
-                        isOnLeave && !hasConflict && 'border-purple-300 bg-purple-100',
-                        isUnavailable && !hasConflict && !isOnLeave && 'border-slate-400 bg-slate-200'
+                        isOnLeave && !hasConflict && 'border-purple-300 bg-purple-100'
                       )}>
                         {isSelected && <Check className="w-3 h-3 text-white" />}
                       </div>
@@ -407,6 +408,12 @@ export function ShiftAssignmentModal({
                               {leaveWarning.message}
                             </span>
                           )}
+                          {isCurrentlyUnavailable && !hasConflict && !isOnLeave && (
+                            <span className="flex items-center gap-1 text-xs text-amber-600">
+                              <AlertTriangle className="w-3 h-3" />
+                              כרגע {getStatusName(soldier.statusId)}
+                            </span>
+                          )}
                           {leaveWarning.type === 'leavingSoon' && !hasConflict && !isOnLeave && (
                             <span className="flex items-center gap-1 text-xs text-orange-600">
                               <Calendar className="w-3 h-3" />
@@ -419,13 +426,13 @@ export function ShiftAssignmentModal({
                               {leaveWarning.message}
                             </span>
                           )}
-                          {restViolationType === 'error' && !hasConflict && !isUnavailable && !isOnLeave && (
+                          {restViolationType === 'error' && !hasConflict && !isCurrentlyUnavailable && !isOnLeave && (
                             <span className="flex items-center gap-1 text-xs text-red-600">
                               <AlertCircle className="w-3 h-3" />
                               מנוחה קריטית
                             </span>
                           )}
-                          {restViolationType === 'warning' && !hasConflict && !isUnavailable && !isOnLeave && (
+                          {restViolationType === 'warning' && !hasConflict && !isCurrentlyUnavailable && !isOnLeave && (
                             <span className="flex items-center gap-1 text-xs text-orange-600">
                               <AlertTriangle className="w-3 h-3" />
                               מנוחה
