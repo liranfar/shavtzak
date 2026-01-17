@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
-import { ChevronRight, ChevronLeft, Plus } from 'lucide-react';
-import { format, addDays, subDays, setHours, setMinutes, startOfDay } from 'date-fns';
+import { ChevronRight, ChevronLeft, Plus, Users, Clock } from 'lucide-react';
+import { format, addDays, subDays, setHours, setMinutes, startOfDay, differenceInMinutes } from 'date-fns';
 import { he } from 'date-fns/locale';
 import {
   DndContext,
@@ -71,6 +71,66 @@ export function SchedulePage() {
   const alertsByShift = useMemo(() => {
     return validateDaySchedule(shifts, soldiers);
   }, [shifts, soldiers]);
+
+  // Calculate shift time per soldier for the selected day
+  const soldierShiftStats = useMemo(() => {
+    const dayStart = startOfDay(selectedDate);
+    const dayEnd = addDays(dayStart, 1);
+
+    const stats = new Map<string, { totalMinutes: number; shifts: Shift[] }>();
+
+    // Filter shifts that overlap with the selected day
+    const dayShifts = shifts.filter((s) => {
+      const shiftStart = new Date(s.startTime);
+      const shiftEnd = new Date(s.endTime);
+      return shiftStart < dayEnd && shiftEnd > dayStart;
+    });
+
+    for (const shift of dayShifts) {
+      const shiftStart = new Date(shift.startTime);
+      const shiftEnd = new Date(shift.endTime);
+
+      // Calculate the portion of the shift that falls within the selected day
+      const effectiveStart = shiftStart < dayStart ? dayStart : shiftStart;
+      const effectiveEnd = shiftEnd > dayEnd ? dayEnd : shiftEnd;
+      const minutes = differenceInMinutes(effectiveEnd, effectiveStart);
+
+      const existing = stats.get(shift.soldierId) || { totalMinutes: 0, shifts: [] };
+      existing.totalMinutes += minutes;
+      existing.shifts.push(shift);
+      stats.set(shift.soldierId, existing);
+    }
+
+    return stats;
+  }, [shifts, selectedDate]);
+
+  // Group soldiers by platoon with their shift stats
+  const soldiersByPlatoon = useMemo(() => {
+    const grouped = new Map<string, { platoon: typeof platoons[0] | null; soldiers: Array<{ soldier: Soldier; totalMinutes: number; shifts: Shift[] }> }>();
+
+    for (const soldier of soldiers) {
+      const platoonId = soldier.platoonId || '__no_platoon__';
+      const platoon = platoons.find((p) => p.id === soldier.platoonId) || null;
+
+      if (!grouped.has(platoonId)) {
+        grouped.set(platoonId, { platoon, soldiers: [] });
+      }
+
+      const stats = soldierShiftStats.get(soldier.id) || { totalMinutes: 0, shifts: [] };
+      grouped.get(platoonId)!.soldiers.push({
+        soldier,
+        totalMinutes: stats.totalMinutes,
+        shifts: stats.shifts,
+      });
+    }
+
+    // Sort soldiers within each platoon by shift time (descending)
+    for (const group of grouped.values()) {
+      group.soldiers.sort((a, b) => b.totalMinutes - a.totalMinutes);
+    }
+
+    return grouped;
+  }, [soldiers, platoons, soldierShiftStats]);
 
   const handlePrevDay = () => setSelectedDate(subDays(selectedDate, 1));
   const handleNextDay = () => setSelectedDate(addDays(selectedDate, 1));
@@ -414,6 +474,98 @@ export function SchedulePage() {
               <span>המשך משמרת</span>
             </div>
           </div>
+        </div>
+
+        {/* Soldier Shift/Rest Distribution by Platoon */}
+        <div className="space-y-4">
+          {Array.from(soldiersByPlatoon.entries()).map(([platoonId, { platoon, soldiers: platoonSoldiers }]) => {
+            // Only show platoons that have at least one soldier with shifts
+            const soldiersWithShifts = platoonSoldiers.filter((s) => s.totalMinutes > 0);
+            if (soldiersWithShifts.length === 0) return null;
+
+            return (
+              <div key={platoonId} className="bg-white rounded-xl border border-slate-200 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Users className="w-5 h-5" style={{ color: platoon?.color || '#64748B' }} />
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    {platoon?.name || 'ללא מחלקה'}
+                  </h3>
+                  <span className="text-xs text-slate-500">
+                    ({soldiersWithShifts.length} חיילים במשמרת)
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {soldiersWithShifts.map(({ soldier, totalMinutes, shifts: soldierShifts }) => {
+                    const totalHours = totalMinutes / 60;
+                    const restMinutes = 24 * 60 - totalMinutes;
+                    const shiftPercentage = Math.min((totalMinutes / (24 * 60)) * 100, 100);
+
+                    // Determine bar color based on shift load
+                    let barColor = platoon?.color || '#3B82F6';
+                    let statusColor = 'text-slate-600';
+                    if (totalHours >= 12) {
+                      barColor = '#EF4444'; // Red for heavy load
+                      statusColor = 'text-red-600';
+                    } else if (totalHours >= 8) {
+                      barColor = '#F59E0B'; // Orange for moderate load
+                      statusColor = 'text-orange-600';
+                    }
+
+                    return (
+                      <div key={soldier.id} className="flex items-center gap-3">
+                        {/* Soldier name */}
+                        <div className="w-24 text-sm font-medium text-slate-900 truncate" title={soldier.name}>
+                          {soldier.name}
+                        </div>
+
+                        {/* Progress bar */}
+                        <div className="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden relative">
+                          {/* Shift portion */}
+                          <div
+                            className="h-full rounded-full transition-all duration-300"
+                            style={{
+                              width: `${shiftPercentage}%`,
+                              backgroundColor: barColor,
+                            }}
+                          />
+                          {/* Time labels inside bar */}
+                          <div className="absolute inset-0 flex items-center justify-between px-2 text-[10px]">
+                            <span className={shiftPercentage > 15 ? 'text-white font-medium' : 'text-slate-600 font-medium'}>
+                              {totalHours.toFixed(1)} ש׳
+                            </span>
+                            {shiftPercentage < 85 && (
+                              <span className="text-slate-500">
+                                {(restMinutes / 60).toFixed(1)} ש׳ מנוחה
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Shift details */}
+                        <div className={clsx('w-20 text-xs text-left', statusColor)}>
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>{soldierShifts.length} משמרות</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Platoon summary */}
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span>
+                    סה״כ: {(soldiersWithShifts.reduce((sum, s) => sum + s.totalMinutes, 0) / 60).toFixed(1)} שעות משמרת
+                  </span>
+                  <span>
+                    ממוצע: {(soldiersWithShifts.reduce((sum, s) => sum + s.totalMinutes, 0) / soldiersWithShifts.length / 60).toFixed(1)} ש׳ לחייל
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
