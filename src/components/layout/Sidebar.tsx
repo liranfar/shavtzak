@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
-import { CalendarDays, Eye, Users, Target, X } from 'lucide-react';
+import { CalendarDays, Eye, Users, Target, X, LogOut } from 'lucide-react';
 import { labels } from '../../utils/translations';
+import { useAuthStore } from '../../stores/authStore';
 import clsx from 'clsx';
 
 interface SidebarProps {
@@ -16,6 +17,12 @@ const navItems = [
 ];
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
+  const { signOut, user } = useAuthStore();
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
+
   return (
     <>
       {/* Mobile overlay */}
@@ -45,8 +52,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         {/* Navigation */}
-        <nav className="px-3 py-4">
-          <ul className="space-y-1">
+        <nav className="px-3 py-4 flex flex-col h-[calc(100%-48px)] lg:h-full">
+          <ul className="space-y-1 flex-1">
             {navItems.map(({ to, icon: Icon, label }) => (
               <li key={to}>
                 <NavLink
@@ -67,6 +74,22 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               </li>
             ))}
           </ul>
+
+          {/* User section */}
+          <div className="border-t border-slate-200 pt-4 mt-4">
+            {user && (
+              <p className="px-3 text-xs text-slate-500 truncate mb-2" dir="ltr">
+                {user.email}
+              </p>
+            )}
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 w-full transition-colors"
+            >
+              <LogOut className="w-5 h-5" />
+              התנתקות
+            </button>
+          </div>
         </nav>
       </aside>
     </>

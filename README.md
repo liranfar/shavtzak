@@ -27,6 +27,11 @@ A modern web application for managing military shift schedules, soldier assignme
 - CSV export/import functionality
 - Real-time data synchronization
 
+### Security
+- Email/password authentication
+- Row Level Security (RLS) policies
+- Protected API access
+
 ## Tech Stack
 
 - **Frontend**: React 18 with TypeScript
@@ -54,6 +59,7 @@ A modern web application for managing military shift schedules, soldier assignme
 2. Go to SQL Editor and run the contents of `supabase/schema.sql`
 3. Optionally run `supabase/seed.sql` to populate sample data
 4. Get your project URL and anon key from Project Settings > API
+5. Create a user account in Authentication > Users (for login)
 
 ### Installation
 
@@ -110,7 +116,8 @@ src/
 
 supabase/
 ├── schema.sql        # Database schema
-└── seed.sql          # Sample data
+├── seed.sql          # Sample data
+└── migrations/       # Database migrations
 ```
 
 ## Language

@@ -1,0 +1,95 @@
+import { create } from 'zustand';
+import { supabase } from '../lib/supabase';
+import type { User, Session } from '@supabase/supabase-js';
+
+interface AuthState {
+  user: User | null;
+  session: Session | null;
+  isLoading: boolean;
+  error: string | null;
+
+  // Actions
+  initialize: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  clearError: () => void;
+}
+
+export const useAuthStore = create<AuthState>((set) => ({
+  user: null,
+  session: null,
+  isLoading: true,
+  error: null,
+
+  initialize: async () => {
+    try {
+      // Get current session
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) throw error;
+
+      set({
+        session,
+        user: session?.user ?? null,
+        isLoading: false,
+      });
+
+      // Listen for auth changes
+      supabase.auth.onAuthStateChange((_event, session) => {
+        set({
+          session,
+          user: session?.user ?? null,
+        });
+      });
+    } catch (error) {
+      set({
+        error: (error as Error).message,
+        isLoading: false,
+      });
+    }
+  },
+
+  signIn: async (email: string, password: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      set({
+        user: data.user,
+        session: data.session,
+        isLoading: false,
+      });
+    } catch (error) {
+      set({
+        error: (error as Error).message,
+        isLoading: false,
+      });
+      throw error;
+    }
+  },
+
+  signOut: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+
+      set({
+        user: null,
+        session: null,
+        isLoading: false,
+      });
+    } catch (error) {
+      set({
+        error: (error as Error).message,
+        isLoading: false,
+      });
+    }
+  },
+
+  clearError: () => set({ error: null }),
+}));

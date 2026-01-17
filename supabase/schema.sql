@@ -123,7 +123,7 @@ CREATE TRIGGER missions_updated_at
   BEFORE UPDATE ON missions
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
--- Disable RLS for single-user app (can enable later for multi-user)
+-- Enable Row Level Security on all tables
 ALTER TABLE certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE soldier_statuses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE platoons ENABLE ROW LEVEL SECURITY;
@@ -134,13 +134,13 @@ ALTER TABLE missions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mission_certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shifts ENABLE ROW LEVEL SECURITY;
 
--- Allow all operations for anonymous users (single-user mode)
-CREATE POLICY "Allow all for anon" ON certificates FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all for anon" ON soldier_statuses FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all for anon" ON platoons FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all for anon" ON squads FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all for anon" ON soldiers FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all for anon" ON soldier_certificates FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all for anon" ON missions FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all for anon" ON mission_certificates FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all for anon" ON shifts FOR ALL TO anon USING (true) WITH CHECK (true);
+-- Allow all operations for authenticated users only
+CREATE POLICY "Allow all for authenticated" ON certificates FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for authenticated" ON soldier_statuses FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for authenticated" ON platoons FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for authenticated" ON squads FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for authenticated" ON soldiers FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for authenticated" ON soldier_certificates FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for authenticated" ON missions FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for authenticated" ON mission_certificates FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for authenticated" ON shifts FOR ALL TO authenticated USING (true) WITH CHECK (true);

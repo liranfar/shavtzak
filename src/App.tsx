@@ -1,33 +1,34 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
 import { SchedulePage } from './pages/SchedulePage';
 import { ViewPage } from './pages/ViewPage';
 import { SoldiersPage } from './pages/SoldiersPage';
 import { MissionsPage } from './pages/MissionsPage';
-import { supabase } from './lib/supabase';
+import { LoginPage } from './pages/LoginPage';
+import { useAuthStore } from './stores/authStore';
 import { labels } from './utils/translations';
 
 function App() {
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { user, isLoading, error, initialize } = useAuthStore();
 
   useEffect(() => {
-    async function checkConnection() {
-      try {
-        // Simple query to verify Supabase connection
-        const { error } = await supabase.from('platoons').select('id').limit(1);
-        if (error) throw error;
-        setIsInitialized(true);
-      } catch (err) {
-        setError((err as Error).message);
-        console.error('Failed to connect to database:', err);
-      }
-    }
+    initialize();
+  }, [initialize]);
 
-    checkConnection();
-  }, []);
+  // Show loading while checking auth state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-slate-600">{labels.messages.loading}</p>
+        </div>
+      </div>
+    );
+  }
 
+  // Show error if auth initialization failed
   if (error) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -42,17 +43,12 @@ function App() {
     );
   }
 
-  if (!isInitialized) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-600">{labels.messages.loading}</p>
-        </div>
-      </div>
-    );
+  // Not authenticated - show login page
+  if (!user) {
+    return <LoginPage />;
   }
 
+  // Authenticated - show main app
   return (
     <BrowserRouter>
       <Routes>
