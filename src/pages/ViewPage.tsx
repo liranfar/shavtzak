@@ -7,12 +7,15 @@ import { useScheduleStore } from '../stores/scheduleStore';
 import { useSoldierStore } from '../stores/soldierStore';
 import { usePlatoonStore } from '../stores/platoonStore';
 import { labels } from '../utils/translations';
+import { PageLoader } from '../components/ui/LoadingSpinner';
 
 export function ViewPage() {
-  const { missions, loadMissions } = useMissionStore();
-  const { shifts, loadShifts } = useScheduleStore();
-  const { soldiers, loadSoldiers } = useSoldierStore();
-  const { platoons, loadPlatoons } = usePlatoonStore();
+  const { missions, loadMissions, isLoading: missionsLoading } = useMissionStore();
+  const { shifts, loadShifts, isLoading: shiftsLoading } = useScheduleStore();
+  const { soldiers, loadSoldiers, isLoading: soldiersLoading } = useSoldierStore();
+  const { platoons, loadPlatoons, isLoading: platoonsLoading } = usePlatoonStore();
+
+  const isLoading = missionsLoading || shiftsLoading || soldiersLoading || platoonsLoading;
 
   const [selectedDate, setSelectedDate] = useState(new Date());
 
@@ -213,6 +216,10 @@ export function ViewPage() {
     printWindow.document.write(html);
     printWindow.document.close();
   };
+
+  if (isLoading) {
+    return <PageLoader message="טוען תצוגה..." />;
+  }
 
   return (
     <div className="space-y-4">

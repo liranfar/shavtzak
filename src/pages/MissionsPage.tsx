@@ -5,11 +5,14 @@ import { usePlatoonStore } from '../stores/platoonStore';
 import { labels } from '../utils/translations';
 import { missionsToCSV, parseMissionsCSV, downloadFile, readFileAsText } from '../utils/csvUtils';
 import type { Mission } from '../types/entities';
+import { PageLoader } from '../components/ui/LoadingSpinner';
 import clsx from 'clsx';
 
 export function MissionsPage() {
-  const { missions, loadMissions, addMission, updateMission, deleteMission } = useMissionStore();
-  const { currentPlatoonId, loadPlatoons, platoons, certificates, loadCertificates } = usePlatoonStore();
+  const { missions, loadMissions, addMission, updateMission, deleteMission, isLoading: missionsLoading } = useMissionStore();
+  const { currentPlatoonId, loadPlatoons, platoons, certificates, loadCertificates, isLoading: platoonsLoading } = usePlatoonStore();
+
+  const isLoading = missionsLoading || platoonsLoading;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMission, setEditingMission] = useState<Mission | null>(null);
@@ -119,6 +122,10 @@ export function MissionsPage() {
       fileInputRef.current.value = '';
     }
   };
+
+  if (isLoading) {
+    return <PageLoader message="טוען משימות..." />;
+  }
 
   return (
     <div className="space-y-4">

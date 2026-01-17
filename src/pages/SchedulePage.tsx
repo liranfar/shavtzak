@@ -21,6 +21,7 @@ import { ShiftCell } from '../components/schedule/ShiftCell';
 import { SoldierDragOverlay } from '../components/schedule/SoldierDragOverlay';
 import { validateDaySchedule } from '../services/validationService';
 import { labels } from '../utils/translations';
+import { PageLoader } from '../components/ui/LoadingSpinner';
 import type { Mission, Shift } from '../types/entities';
 import clsx from 'clsx';
 
@@ -32,10 +33,12 @@ for (let h = 0; h < 24; h++) {
 }
 
 export function SchedulePage() {
-  const { missions, loadMissions } = useMissionStore();
-  const { shifts, selectedDate, setSelectedDate, loadShifts, addShift, deleteShift } = useScheduleStore();
-  const { soldiers, loadSoldiers } = useSoldierStore();
-  const { platoons, loadPlatoons, loadSquads, certificates, loadCertificates, statuses, loadStatuses } = usePlatoonStore();
+  const { missions, loadMissions, isLoading: missionsLoading } = useMissionStore();
+  const { shifts, selectedDate, setSelectedDate, loadShifts, addShift, deleteShift, isLoading: shiftsLoading } = useScheduleStore();
+  const { soldiers, loadSoldiers, isLoading: soldiersLoading } = useSoldierStore();
+  const { platoons, loadPlatoons, loadSquads, certificates, loadCertificates, statuses, loadStatuses, isLoading: platoonsLoading } = usePlatoonStore();
+
+  const isLoading = missionsLoading || shiftsLoading || soldiersLoading || platoonsLoading;
 
   const [modalData, setModalData] = useState<{
     mission: Mission;
@@ -207,6 +210,10 @@ export function SchedulePage() {
       }
     }
   };
+
+  if (isLoading) {
+    return <PageLoader message="טוען לוח משמרות..." />;
+  }
 
   return (
     <DndContext

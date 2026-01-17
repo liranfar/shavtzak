@@ -6,10 +6,11 @@ import { labels, getRoleLabel } from '../utils/translations';
 import { ROLE_COLORS } from '../utils/constants';
 import { soldiersToCSV, parseSoldiersCSV, downloadFile, readFileAsText } from '../utils/csvUtils';
 import type { Soldier, SoldierRole, Platoon, Squad, Certificate, SoldierStatusDef } from '../types/entities';
+import { PageLoader } from '../components/ui/LoadingSpinner';
 import clsx from 'clsx';
 
 export function SoldiersPage() {
-  const { soldiers, loadSoldiers, addSoldier, updateSoldier, deleteSoldier } = useSoldierStore();
+  const { soldiers, loadSoldiers, addSoldier, updateSoldier, deleteSoldier, isLoading: soldiersLoading } = useSoldierStore();
   const {
     squads,
     loadSquads,
@@ -32,7 +33,10 @@ export function SoldiersPage() {
     addStatus,
     updateStatus,
     deleteStatus,
+    isLoading: platoonsLoading,
   } = usePlatoonStore();
+
+  const isLoading = soldiersLoading || platoonsLoading;
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -204,6 +208,10 @@ export function SoldiersPage() {
       fileInputRef.current.value = '';
     }
   };
+
+  if (isLoading) {
+    return <PageLoader message="טוען חיילים..." />;
+  }
 
   return (
     <div className="space-y-4">

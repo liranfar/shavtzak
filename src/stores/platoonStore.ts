@@ -1,6 +1,16 @@
 import { create } from 'zustand';
-import { db, generateId, generatePlatoonColor } from '../db/database';
+import { supabase } from '../lib/supabase';
 import type { Platoon, Squad, Certificate, SoldierStatusDef } from '../types/entities';
+
+// Predefined colors for platoons
+const PLATOON_COLORS = [
+  '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
+  '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1',
+];
+
+function generatePlatoonColor(): string {
+  return PLATOON_COLORS[Math.floor(Math.random() * PLATOON_COLORS.length)];
+}
 
 interface PlatoonState {
   platoons: Platoon[];
@@ -56,7 +66,17 @@ export const usePlatoonStore = create<PlatoonState>((set, get) => ({
   loadPlatoons: async () => {
     set({ isLoading: true, error: null });
     try {
-      const platoons = await db.platoons.toArray();
+      const { data, error } = await supabase.from('platoons').select('*');
+      if (error) throw error;
+
+      const platoons: Platoon[] = (data || []).map(row => ({
+        id: row.id,
+        name: row.name,
+        companyId: row.company_id,
+        color: row.color,
+        createdAt: new Date(row.created_at),
+      }));
+
       const currentPlatoonId = platoons.length > 0 ? platoons[0].id : null;
       set({ platoons, currentPlatoonId, isLoading: false });
     } catch (error) {
@@ -66,7 +86,16 @@ export const usePlatoonStore = create<PlatoonState>((set, get) => ({
 
   loadSquads: async () => {
     try {
-      const squads = await db.squads.toArray();
+      const { data, error } = await supabase.from('squads').select('*');
+      if (error) throw error;
+
+      const squads: Squad[] = (data || []).map(row => ({
+        id: row.id,
+        name: row.name,
+        platoonId: row.platoon_id || '',
+        createdAt: new Date(row.created_at),
+      }));
+
       set({ squads });
     } catch (error) {
       set({ error: (error as Error).message });
@@ -75,7 +104,15 @@ export const usePlatoonStore = create<PlatoonState>((set, get) => ({
 
   loadCertificates: async () => {
     try {
-      const certificates = await db.certificates.toArray();
+      const { data, error } = await supabase.from('certificates').select('*');
+      if (error) throw error;
+
+      const certificates: Certificate[] = (data || []).map(row => ({
+        id: row.id,
+        name: row.name,
+        createdAt: new Date(row.created_at),
+      }));
+
       set({ certificates });
     } catch (error) {
       set({ error: (error as Error).message });
@@ -84,7 +121,17 @@ export const usePlatoonStore = create<PlatoonState>((set, get) => ({
 
   loadStatuses: async () => {
     try {
-      const statuses = await db.statuses.toArray();
+      const { data, error } = await supabase.from('soldier_statuses').select('*');
+      if (error) throw error;
+
+      const statuses: SoldierStatusDef[] = (data || []).map(row => ({
+        id: row.id,
+        name: row.name,
+        color: row.color,
+        isAvailable: row.is_available,
+        createdAt: new Date(row.created_at),
+      }));
+
       set({ statuses });
     } catch (error) {
       set({ error: (error as Error).message });
@@ -106,32 +153,46 @@ export const usePlatoonStore = create<PlatoonState>((set, get) => ({
 
   // Platoon CRUD
   addPlatoon: async (name: string) => {
+    const color = generatePlatoonColor();
+
+    const { data: row, error } = await supabase
+      .from('platoons')
+      .insert({ name, color, company_id: 'company-1' })
+      .select()
+      .single();
+
+    if (error) throw error;
+
     const platoon: Platoon = {
-      id: generateId(),
-      name,
-      companyId: 'company-1',
-      color: generatePlatoonColor(),
-      createdAt: new Date(),
+      id: row.id,
+      name: row.name,
+      companyId: row.company_id,
+      color: row.color,
+      createdAt: new Date(row.created_at),
     };
-    await db.platoons.add(platoon);
+
     set((state) => ({ platoons: [...state.platoons, platoon] }));
     return platoon;
   },
 
   updatePlatoon: async (id: string, name: string) => {
-    await db.platoons.update(id, { name });
+    const { error } = await supabase
+      .from('platoons')
+      .update({ name })
+      .eq('id', id);
+
+    if (error) throw error;
+
     set((state) => ({
       platoons: state.platoons.map((p) => (p.id === id ? { ...p, name } : p)),
     }));
   },
 
   deletePlatoon: async (id: string) => {
-    await db.platoons.delete(id);
-    // Also delete associated squads
-    const squadsToDelete = get().squads.filter((s) => s.platoonId === id);
-    for (const squad of squadsToDelete) {
-      await db.squads.delete(squad.id);
-    }
+    // Squads are deleted via CASCADE in the database
+    const { error } = await supabase.from('platoons').delete().eq('id', id);
+    if (error) throw error;
+
     set((state) => ({
       platoons: state.platoons.filter((p) => p.id !== id),
       squads: state.squads.filter((s) => s.platoonId !== id),
@@ -141,26 +202,42 @@ export const usePlatoonStore = create<PlatoonState>((set, get) => ({
 
   // Squad CRUD
   addSquad: async (name: string, platoonId: string) => {
+    const { data: row, error } = await supabase
+      .from('squads')
+      .insert({ name, platoon_id: platoonId })
+      .select()
+      .single();
+
+    if (error) throw error;
+
     const squad: Squad = {
-      id: generateId(),
-      name,
-      platoonId,
-      createdAt: new Date(),
+      id: row.id,
+      name: row.name,
+      platoonId: row.platoon_id || '',
+      createdAt: new Date(row.created_at),
     };
-    await db.squads.add(squad);
+
     set((state) => ({ squads: [...state.squads, squad] }));
     return squad;
   },
 
   updateSquad: async (id: string, name: string) => {
-    await db.squads.update(id, { name });
+    const { error } = await supabase
+      .from('squads')
+      .update({ name })
+      .eq('id', id);
+
+    if (error) throw error;
+
     set((state) => ({
       squads: state.squads.map((s) => (s.id === id ? { ...s, name } : s)),
     }));
   },
 
   deleteSquad: async (id: string) => {
-    await db.squads.delete(id);
+    const { error } = await supabase.from('squads').delete().eq('id', id);
+    if (error) throw error;
+
     set((state) => ({
       squads: state.squads.filter((s) => s.id !== id),
     }));
@@ -168,25 +245,41 @@ export const usePlatoonStore = create<PlatoonState>((set, get) => ({
 
   // Certificate CRUD
   addCertificate: async (name: string) => {
+    const { data: row, error } = await supabase
+      .from('certificates')
+      .insert({ name })
+      .select()
+      .single();
+
+    if (error) throw error;
+
     const certificate: Certificate = {
-      id: generateId(),
-      name,
-      createdAt: new Date(),
+      id: row.id,
+      name: row.name,
+      createdAt: new Date(row.created_at),
     };
-    await db.certificates.add(certificate);
+
     set((state) => ({ certificates: [...state.certificates, certificate] }));
     return certificate;
   },
 
   updateCertificate: async (id: string, name: string) => {
-    await db.certificates.update(id, { name });
+    const { error } = await supabase
+      .from('certificates')
+      .update({ name })
+      .eq('id', id);
+
+    if (error) throw error;
+
     set((state) => ({
       certificates: state.certificates.map((c) => (c.id === id ? { ...c, name } : c)),
     }));
   },
 
   deleteCertificate: async (id: string) => {
-    await db.certificates.delete(id);
+    const { error } = await supabase.from('certificates').delete().eq('id', id);
+    if (error) throw error;
+
     set((state) => ({
       certificates: state.certificates.filter((c) => c.id !== id),
     }));
@@ -194,27 +287,48 @@ export const usePlatoonStore = create<PlatoonState>((set, get) => ({
 
   // Status CRUD
   addStatus: async (name: string, color: string, isAvailable: boolean) => {
+    const { data: row, error } = await supabase
+      .from('soldier_statuses')
+      .insert({ name, color, is_available: isAvailable })
+      .select()
+      .single();
+
+    if (error) throw error;
+
     const status: SoldierStatusDef = {
-      id: generateId(),
-      name,
-      color,
-      isAvailable,
-      createdAt: new Date(),
+      id: row.id,
+      name: row.name,
+      color: row.color,
+      isAvailable: row.is_available,
+      createdAt: new Date(row.created_at),
     };
-    await db.statuses.add(status);
+
     set((state) => ({ statuses: [...state.statuses, status] }));
     return status;
   },
 
   updateStatus: async (id: string, updates: Partial<Omit<SoldierStatusDef, 'id' | 'createdAt'>>) => {
-    await db.statuses.update(id, updates);
+    const dbUpdates: Record<string, unknown> = {};
+    if (updates.name !== undefined) dbUpdates.name = updates.name;
+    if (updates.color !== undefined) dbUpdates.color = updates.color;
+    if (updates.isAvailable !== undefined) dbUpdates.is_available = updates.isAvailable;
+
+    const { error } = await supabase
+      .from('soldier_statuses')
+      .update(dbUpdates)
+      .eq('id', id);
+
+    if (error) throw error;
+
     set((state) => ({
       statuses: state.statuses.map((s) => (s.id === id ? { ...s, ...updates } : s)),
     }));
   },
 
   deleteStatus: async (id: string) => {
-    await db.statuses.delete(id);
+    const { error } = await supabase.from('soldier_statuses').delete().eq('id', id);
+    if (error) throw error;
+
     set((state) => ({
       statuses: state.statuses.filter((s) => s.id !== id),
     }));

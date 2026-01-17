@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { db, generateId } from '../db/database';
+import { supabase } from '../lib/supabase';
 import type { Shift, CreateShiftInput, UpdateShiftInput, ShiftStatus } from '../types/entities';
 import { startOfDay, endOfDay, isWithinInterval, areIntervalsOverlapping } from 'date-fns';
 
@@ -26,6 +26,27 @@ interface ScheduleState {
   hasOverlappingShift: (soldierId: string, startTime: Date, endTime: Date, excludeShiftId?: string) => boolean;
 }
 
+// Helper to convert DB row to Shift entity
+function toShift(row: {
+  id: string;
+  mission_id: string | null;
+  soldier_id: string | null;
+  start_time: string;
+  end_time: string;
+  status: string;
+  created_at: string;
+}): Shift {
+  return {
+    id: row.id,
+    missionId: row.mission_id || '',
+    soldierId: row.soldier_id || '',
+    startTime: new Date(row.start_time),
+    endTime: new Date(row.end_time),
+    status: row.status as ShiftStatus,
+    createdAt: new Date(row.created_at),
+  };
+}
+
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
   shifts: [],
   selectedDate: new Date(),
@@ -35,35 +56,12 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   loadShifts: async () => {
     set({ isLoading: true, error: null });
     try {
-      // First, cleanup orphaned shifts (from deleted missions/soldiers only)
-      const missions = await db.missions.toArray();
-      const validMissionIds = new Set(missions.map((m) => m.id));
-      const soldiers = await db.soldiers.toArray();
-      const validSoldierIds = new Set(soldiers.map((s) => s.id));
+      // Load all shifts - orphan cleanup is handled by database CASCADE
+      const { data, error } = await supabase.from('shifts').select('*');
+      if (error) throw error;
 
-      const allShifts = await db.shifts.toArray();
-      const orphanedShiftIds = allShifts
-        .filter((s) =>
-          !validMissionIds.has(s.missionId) ||
-          !validSoldierIds.has(s.soldierId)
-        )
-        .map((s) => s.id);
-
-      if (orphanedShiftIds.length > 0) {
-        console.log(`Cleaning up ${orphanedShiftIds.length} orphaned shifts`);
-        await db.shifts.bulkDelete(orphanedShiftIds);
-      }
-
-      // Load remaining valid shifts
-      const shifts = await db.shifts.toArray();
-      // Convert date strings back to Date objects
-      const parsedShifts = shifts.map((s) => ({
-        ...s,
-        startTime: new Date(s.startTime),
-        endTime: new Date(s.endTime),
-        createdAt: new Date(s.createdAt),
-      }));
-      set({ shifts: parsedShifts, isLoading: false });
+      const shifts = (data || []).map(toShift);
+      set({ shifts, isLoading: false });
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false });
     }
@@ -72,42 +70,59 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   loadShiftsForDate: async (date: Date) => {
     set({ isLoading: true, error: null });
     try {
-      const dayStart = startOfDay(date);
-      const dayEnd = endOfDay(date);
+      const dayStart = startOfDay(date).toISOString();
+      const dayEnd = endOfDay(date).toISOString();
 
-      const shifts = await db.shifts
-        .where('startTime')
-        .between(dayStart, dayEnd, true, true)
-        .toArray();
+      const { data, error } = await supabase
+        .from('shifts')
+        .select('*')
+        .gte('start_time', dayStart)
+        .lte('start_time', dayEnd);
 
-      const parsedShifts = shifts.map((s) => ({
-        ...s,
-        startTime: new Date(s.startTime),
-        endTime: new Date(s.endTime),
-        createdAt: new Date(s.createdAt),
-      }));
+      if (error) throw error;
 
-      set({ shifts: parsedShifts, isLoading: false });
+      const shifts = (data || []).map(toShift);
+      set({ shifts, isLoading: false });
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false });
     }
   },
 
   addShift: async (input: CreateShiftInput) => {
-    const now = new Date();
-    const shift: Shift = {
-      ...input,
-      id: generateId(),
-      createdAt: now,
-    };
+    const { data: row, error } = await supabase
+      .from('shifts')
+      .insert({
+        mission_id: input.missionId,
+        soldier_id: input.soldierId,
+        start_time: input.startTime.toISOString(),
+        end_time: input.endTime.toISOString(),
+        status: input.status,
+      })
+      .select()
+      .single();
 
-    await db.shifts.add(shift);
+    if (error) throw error;
+
+    const shift = toShift(row);
     set((state) => ({ shifts: [...state.shifts, shift] }));
     return shift;
   },
 
   updateShift: async (id: string, input: UpdateShiftInput) => {
-    await db.shifts.update(id, input);
+    const updateData: Record<string, unknown> = {};
+    if (input.missionId !== undefined) updateData.mission_id = input.missionId;
+    if (input.soldierId !== undefined) updateData.soldier_id = input.soldierId;
+    if (input.startTime !== undefined) updateData.start_time = input.startTime.toISOString();
+    if (input.endTime !== undefined) updateData.end_time = input.endTime.toISOString();
+    if (input.status !== undefined) updateData.status = input.status;
+
+    const { error } = await supabase
+      .from('shifts')
+      .update(updateData)
+      .eq('id', id);
+
+    if (error) throw error;
+
     set((state) => ({
       shifts: state.shifts.map((s) =>
         s.id === id ? { ...s, ...input } : s
@@ -116,14 +131,22 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   },
 
   deleteShift: async (id: string) => {
-    await db.shifts.delete(id);
+    const { error } = await supabase.from('shifts').delete().eq('id', id);
+    if (error) throw error;
+
     set((state) => ({
       shifts: state.shifts.filter((s) => s.id !== id),
     }));
   },
 
   updateShiftStatus: async (id: string, status: ShiftStatus) => {
-    await db.shifts.update(id, { status });
+    const { error } = await supabase
+      .from('shifts')
+      .update({ status })
+      .eq('id', id);
+
+    if (error) throw error;
+
     set((state) => ({
       shifts: state.shifts.map((s) =>
         s.id === id ? { ...s, status } : s
@@ -188,37 +211,9 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     );
   },
 
+  // With Supabase CASCADE deletes, orphan cleanup is automatic
+  // This function is kept for API compatibility but does nothing
   cleanupOrphanedShifts: async () => {
-    try {
-      // Get all valid entities
-      const missions = await db.missions.toArray();
-      const validMissionIds = new Set(missions.map((m) => m.id));
-      const soldiers = await db.soldiers.toArray();
-      const validSoldierIds = new Set(soldiers.map((s) => s.id));
-
-      // Find orphaned shifts (only check mission and soldier existence)
-      const allShifts = await db.shifts.toArray();
-      const orphanedShiftIds = allShifts
-        .filter((s) =>
-          !validMissionIds.has(s.missionId) ||
-          !validSoldierIds.has(s.soldierId)
-        )
-        .map((s) => s.id);
-
-      // Delete orphaned shifts
-      if (orphanedShiftIds.length > 0) {
-        console.log(`Cleaning up ${orphanedShiftIds.length} orphaned shifts`);
-        await db.shifts.bulkDelete(orphanedShiftIds);
-        // Update local state
-        set((state) => ({
-          shifts: state.shifts.filter((s) => !orphanedShiftIds.includes(s.id)),
-        }));
-      }
-
-      return orphanedShiftIds.length;
-    } catch (error) {
-      console.error('Failed to cleanup orphaned shifts:', error);
-      return 0;
-    }
+    return 0;
   },
 }));

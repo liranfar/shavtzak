@@ -5,7 +5,7 @@ import { SchedulePage } from './pages/SchedulePage';
 import { ViewPage } from './pages/ViewPage';
 import { SoldiersPage } from './pages/SoldiersPage';
 import { MissionsPage } from './pages/MissionsPage';
-import { seedDatabase } from './db/database';
+import { supabase } from './lib/supabase';
 import { labels } from './utils/translations';
 
 function App() {
@@ -13,17 +13,19 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function initDatabase() {
+    async function checkConnection() {
       try {
-        await seedDatabase();
+        // Simple query to verify Supabase connection
+        const { error } = await supabase.from('platoons').select('id').limit(1);
+        if (error) throw error;
         setIsInitialized(true);
       } catch (err) {
         setError((err as Error).message);
-        console.error('Failed to initialize database:', err);
+        console.error('Failed to connect to database:', err);
       }
     }
 
-    initDatabase();
+    checkConnection();
   }, []);
 
   if (error) {
@@ -32,6 +34,9 @@ function App() {
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md">
           <h2 className="text-lg font-semibold text-red-800 mb-2">שגיאה בטעינת המערכת</h2>
           <p className="text-sm text-red-600">{error}</p>
+          <p className="text-xs text-red-500 mt-2">
+            ודא שהגדרות Supabase נכונות ב-.env
+          </p>
         </div>
       </div>
     );
