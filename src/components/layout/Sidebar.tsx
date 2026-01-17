@@ -36,8 +36,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Sidebar */}
       <aside
         className={clsx(
-          'fixed lg:static inset-y-0 right-0 z-50 w-64 bg-white border-l border-slate-200 transform transition-transform lg:transform-none',
-          isOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'
+          'fixed top-0 lg:top-[57px] bottom-0 right-0 z-50 lg:z-30 w-64 bg-white border-l border-slate-200 transform transition-transform lg:translate-x-0',
+          isOpen ? 'translate-x-0' : 'translate-x-full'
         )}
       >
         {/* Mobile close button */}

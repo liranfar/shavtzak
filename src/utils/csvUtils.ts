@@ -249,6 +249,8 @@ export function parseSoldiersCSV(
         platoonId: platoon?.id || '',
         squadId: squad?.id || '',
         certificateIds,
+        leaveStart: null,
+        leaveEnd: null,
       });
     } catch (e) {
       errors.push(`שורה ${rowIndex + 2}: שגיאה בקריאה`);

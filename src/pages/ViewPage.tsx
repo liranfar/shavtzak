@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { ChevronRight, ChevronLeft, Eye, Download } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Eye, Download, UserX, Calendar } from 'lucide-react';
 import { format, addDays, subDays, startOfDay } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { useMissionStore } from '../stores/missionStore';
@@ -8,12 +8,13 @@ import { useSoldierStore } from '../stores/soldierStore';
 import { usePlatoonStore } from '../stores/platoonStore';
 import { labels } from '../utils/translations';
 import { PageLoader } from '../components/ui/LoadingSpinner';
+import type { Soldier } from '../types/entities';
 
 export function ViewPage() {
   const { missions, loadMissions, isLoading: missionsLoading } = useMissionStore();
   const { shifts, loadShifts, isLoading: shiftsLoading } = useScheduleStore();
   const { soldiers, loadSoldiers, isLoading: soldiersLoading } = useSoldierStore();
-  const { platoons, loadPlatoons, isLoading: platoonsLoading } = usePlatoonStore();
+  const { platoons, loadPlatoons, statuses, loadStatuses, isLoading: platoonsLoading } = usePlatoonStore();
 
   const isLoading = missionsLoading || shiftsLoading || soldiersLoading || platoonsLoading;
 
@@ -24,7 +25,8 @@ export function ViewPage() {
     loadSoldiers();
     loadShifts();
     loadPlatoons();
-  }, [loadMissions, loadSoldiers, loadShifts, loadPlatoons]);
+    loadStatuses();
+  }, [loadMissions, loadSoldiers, loadShifts, loadPlatoons, loadStatuses]);
 
   const handlePrevDay = () => setSelectedDate(subDays(selectedDate, 1));
   const handleNextDay = () => setSelectedDate(addDays(selectedDate, 1));
@@ -61,6 +63,67 @@ export function ViewPage() {
       return shiftStart < dayEnd && shiftEnd > dayStart;
     });
   }, [shifts, selectedDate]);
+
+  // Get soldiers who are unavailable (status is not available) or on leave
+  const unavailableSoldiers = useMemo(() => {
+    const dayStart = startOfDay(selectedDate);
+    const dayEnd = addDays(dayStart, 1);
+
+    return soldiers.filter((soldier) => {
+      // Check if soldier's status is unavailable
+      const status = statuses.find(s => s.id === soldier.statusId);
+      const isStatusUnavailable = status && !status.isAvailable;
+
+      // Check if soldier is on leave during this day
+      const isOnLeave = soldier.leaveStart && soldier.leaveEnd &&
+        new Date(soldier.leaveStart) < dayEnd &&
+        new Date(soldier.leaveEnd) > dayStart;
+
+      return isStatusUnavailable || isOnLeave;
+    });
+  }, [soldiers, statuses, selectedDate]);
+
+  // Group unavailable soldiers by reason
+  const unavailableByReason = useMemo(() => {
+    const dayStart = startOfDay(selectedDate);
+    const dayEnd = addDays(dayStart, 1);
+
+    const grouped: { status: string; color: string; soldiers: Soldier[] }[] = [];
+    const onLeaveSoldiers: Soldier[] = [];
+
+    // Group by status
+    for (const soldier of unavailableSoldiers) {
+      const status = statuses.find(s => s.id === soldier.statusId);
+
+      // Check if on leave
+      const isOnLeave = soldier.leaveStart && soldier.leaveEnd &&
+        new Date(soldier.leaveStart) < dayEnd &&
+        new Date(soldier.leaveEnd) > dayStart;
+
+      if (isOnLeave) {
+        onLeaveSoldiers.push(soldier);
+      } else if (status && !status.isAvailable) {
+        let group = grouped.find(g => g.status === status.name);
+        if (!group) {
+          group = { status: status.name, color: status.color, soldiers: [] };
+          grouped.push(group);
+        }
+        group.soldiers.push(soldier);
+      }
+    }
+
+    // Add leave group if there are soldiers on leave
+    if (onLeaveSoldiers.length > 0) {
+      grouped.unshift({ status: 'ביציאה', color: '#8B5CF6', soldiers: onLeaveSoldiers });
+    }
+
+    return grouped;
+  }, [unavailableSoldiers, statuses, selectedDate]);
+
+  const formatLeaveDate = (soldier: Soldier) => {
+    if (!soldier.leaveStart || !soldier.leaveEnd) return '';
+    return `${format(new Date(soldier.leaveStart), 'dd/MM HH:mm')} - ${format(new Date(soldier.leaveEnd), 'dd/MM HH:mm')}`;
+  };
 
   const handleDownloadPDF = () => {
     const dateDisplay = format(selectedDate, 'EEEE, d בMMMM yyyy', { locale: he });
@@ -321,6 +384,60 @@ export function ViewPage() {
           <p className="text-center text-slate-500 py-8">{labels.messages.noData}</p>
         )}
       </div>
+
+      {/* Unavailable Soldiers Section */}
+      {unavailableByReason.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <UserX className="w-5 h-5 text-slate-500" />
+            <h3 className="text-sm font-semibold text-slate-900">
+              חיילים לא זמינים ({unavailableSoldiers.length})
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {unavailableByReason.map((group) => (
+              <div key={group.status} className="p-3 rounded-lg" style={{ backgroundColor: `${group.color}10` }}>
+                <div className="flex items-center gap-2 mb-2">
+                  {group.status === 'ביציאה' ? (
+                    <Calendar className="w-4 h-4" style={{ color: group.color }} />
+                  ) : (
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: group.color }} />
+                  )}
+                  <h4 className="font-medium text-sm" style={{ color: group.color }}>
+                    {group.status} ({group.soldiers.length})
+                  </h4>
+                </div>
+                <div className="space-y-1">
+                  {group.soldiers.map((soldier) => {
+                    const platoon = platoons.find(p => p.id === soldier.platoonId);
+                    return (
+                      <div
+                        key={soldier.id}
+                        className="flex items-center justify-between text-xs p-2 bg-white rounded border border-slate-100"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: platoon?.color || '#64748B' }}
+                          />
+                          <span className="font-medium text-slate-900">{soldier.name}</span>
+                          <span className="text-slate-500">({platoon?.name || 'ללא מחלקה'})</span>
+                        </div>
+                        {group.status === 'ביציאה' && (
+                          <span className="text-slate-500 text-[10px]">
+                            {formatLeaveDate(soldier)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

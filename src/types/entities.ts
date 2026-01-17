@@ -13,6 +13,8 @@ export interface Soldier {
   platoonId: string;
   squadId: string;
   certificateIds: string[]; // הסמכות
+  leaveStart: Date | null; // תחילת חופשה/יציאה
+  leaveEnd: Date | null; // סיום חופשה/יציאה
   createdAt: Date;
   updatedAt: Date;
 }

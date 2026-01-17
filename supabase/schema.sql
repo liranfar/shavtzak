@@ -58,6 +58,8 @@ CREATE TABLE soldiers (
   status_id UUID REFERENCES soldier_statuses(id),
   platoon_id UUID REFERENCES platoons(id) ON DELETE SET NULL,
   squad_id UUID REFERENCES squads(id) ON DELETE SET NULL,
+  leave_start TIMESTAMPTZ, -- תחילת חופשה/יציאה
+  leave_end TIMESTAMPTZ, -- סיום חופשה/יציאה
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

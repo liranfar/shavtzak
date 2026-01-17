@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import { X, AlertTriangle, AlertCircle, Clock, User, Users, Check, Award, Info, Search } from 'lucide-react';
-import { format, addMinutes } from 'date-fns';
+import { X, AlertTriangle, AlertCircle, Clock, User, Users, Check, Award, Info, Search, Calendar } from 'lucide-react';
+import { format, addMinutes, differenceInHours } from 'date-fns';
 import { he } from 'date-fns/locale';
 import type { Mission, Soldier, Shift, Platoon, Certificate, SoldierStatusDef } from '../../types/entities';
 import { suggestSoldiersForShift } from '../../services/fairnessCalculator';
@@ -183,6 +183,44 @@ export function ShiftAssignmentModal({
       .filter(Boolean);
   };
 
+  // Check if soldier has leave that overlaps or is within 12 hours of the shift
+  const getLeaveWarning = (soldier: Soldier): { type: 'onLeave' | 'leavingSoon' | 'returningRecently' | null; message: string | null } => {
+    if (!soldier.leaveStart && !soldier.leaveEnd) {
+      return { type: null, message: null };
+    }
+
+    const leaveStart = soldier.leaveStart;
+    const leaveEnd = soldier.leaveEnd;
+
+    // Check if on leave during shift
+    if (leaveStart && leaveEnd) {
+      if (startTime >= leaveStart && startTime < leaveEnd) {
+        return { type: 'onLeave', message: `ביציאה עד ${format(leaveEnd, 'dd/MM HH:mm')}` };
+      }
+      if (endTime > leaveStart && endTime <= leaveEnd) {
+        return { type: 'onLeave', message: `ביציאה מ-${format(leaveStart, 'dd/MM HH:mm')}` };
+      }
+    }
+
+    // Check if leaving within 12 hours after shift ends
+    if (leaveStart) {
+      const hoursUntilLeave = differenceInHours(leaveStart, endTime);
+      if (hoursUntilLeave >= 0 && hoursUntilLeave <= 12) {
+        return { type: 'leavingSoon', message: `יוצא בעוד ${hoursUntilLeave} שעות` };
+      }
+    }
+
+    // Check if returning within 12 hours before shift starts
+    if (leaveEnd) {
+      const hoursSinceReturn = differenceInHours(startTime, leaveEnd);
+      if (hoursSinceReturn >= 0 && hoursSinceReturn <= 12) {
+        return { type: 'returningRecently', message: `חוזר ${hoursSinceReturn} שעות לפני` };
+      }
+    }
+
+    return { type: null, message: null };
+  };
+
   const requiredCertNames = useMemo(() => {
     if (!mission.requiredCertificateIds) return [];
     return mission.requiredCertificateIds.map(id => getCertificateName(id)).filter(Boolean);
@@ -312,7 +350,9 @@ export function ShiftAssignmentModal({
                 {platoonSoldiers.map(({ soldier, hasConflict, restViolationType }) => {
                   const isSelected = selectedSoldierIds.has(soldier.id);
                   const isUnavailable = !isStatusAvailable(soldier.statusId);
-                  const isDisabled = hasConflict || isUnavailable;
+                  const leaveWarning = getLeaveWarning(soldier);
+                  const isOnLeave = leaveWarning.type === 'onLeave';
+                  const isDisabled = hasConflict || isUnavailable || isOnLeave;
                   const soldierCerts = getSoldierCertificateNames(soldier);
 
                   return (
@@ -326,7 +366,8 @@ export function ShiftAssignmentModal({
                           ? 'border-blue-500 bg-blue-50'
                           : 'border-slate-200 hover:bg-slate-50',
                         hasConflict && 'opacity-50 cursor-not-allowed bg-red-50 border-red-200',
-                        isUnavailable && !hasConflict && 'opacity-50 cursor-not-allowed bg-slate-100 border-slate-300'
+                        isOnLeave && !hasConflict && 'opacity-50 cursor-not-allowed bg-purple-50 border-purple-200',
+                        isUnavailable && !hasConflict && !isOnLeave && 'opacity-50 cursor-not-allowed bg-slate-100 border-slate-300'
                       )}
                     >
                       {/* Checkbox */}
@@ -334,7 +375,8 @@ export function ShiftAssignmentModal({
                         'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0',
                         isSelected ? 'bg-blue-500 border-blue-500' : 'border-slate-300',
                         hasConflict && 'border-red-300 bg-red-100',
-                        isUnavailable && !hasConflict && 'border-slate-400 bg-slate-200'
+                        isOnLeave && !hasConflict && 'border-purple-300 bg-purple-100',
+                        isUnavailable && !hasConflict && !isOnLeave && 'border-slate-400 bg-slate-200'
                       )}>
                         {isSelected && <Check className="w-3 h-3 text-white" />}
                       </div>
@@ -359,13 +401,31 @@ export function ShiftAssignmentModal({
                               תפוס
                             </span>
                           )}
-                          {restViolationType === 'error' && !hasConflict && !isUnavailable && (
+                          {isOnLeave && !hasConflict && (
+                            <span className="flex items-center gap-1 text-xs text-purple-600">
+                              <Calendar className="w-3 h-3" />
+                              {leaveWarning.message}
+                            </span>
+                          )}
+                          {leaveWarning.type === 'leavingSoon' && !hasConflict && !isOnLeave && (
+                            <span className="flex items-center gap-1 text-xs text-orange-600">
+                              <Calendar className="w-3 h-3" />
+                              {leaveWarning.message}
+                            </span>
+                          )}
+                          {leaveWarning.type === 'returningRecently' && !hasConflict && !isOnLeave && (
+                            <span className="flex items-center gap-1 text-xs text-blue-600">
+                              <Calendar className="w-3 h-3" />
+                              {leaveWarning.message}
+                            </span>
+                          )}
+                          {restViolationType === 'error' && !hasConflict && !isUnavailable && !isOnLeave && (
                             <span className="flex items-center gap-1 text-xs text-red-600">
                               <AlertCircle className="w-3 h-3" />
                               מנוחה קריטית
                             </span>
                           )}
-                          {restViolationType === 'warning' && !hasConflict && !isUnavailable && (
+                          {restViolationType === 'warning' && !hasConflict && !isUnavailable && !isOnLeave && (
                             <span className="flex items-center gap-1 text-xs text-orange-600">
                               <AlertTriangle className="w-3 h-3" />
                               מנוחה

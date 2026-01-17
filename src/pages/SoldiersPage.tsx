@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
-import { Plus, Search, Edit2, Trash2, Settings, X, Award, Circle, Download, Upload } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Settings, X, Award, Circle, Download, Upload, Calendar } from 'lucide-react';
+import { format } from 'date-fns';
 import { useSoldierStore } from '../stores/soldierStore';
 import { usePlatoonStore } from '../stores/platoonStore';
 import { labels, getRoleLabel } from '../utils/translations';
@@ -96,15 +97,22 @@ export function SoldiersPage() {
     return matchesSearch && matchesStatus && matchesPlatoon && matchesCertificate;
   });
 
+  const [leaveStart, setLeaveStart] = useState<string>('');
+  const [leaveEnd, setLeaveEnd] = useState<string>('');
+
   const handleAddSoldier = () => {
     setEditingSoldier(null);
     setSelectedCertificateIds([]);
+    setLeaveStart('');
+    setLeaveEnd('');
     setIsModalOpen(true);
   };
 
   const handleEditSoldier = (soldier: Soldier) => {
     setEditingSoldier(soldier);
     setSelectedCertificateIds(soldier.certificateIds || []);
+    setLeaveStart(soldier.leaveStart ? format(soldier.leaveStart, "yyyy-MM-dd'T'HH:mm") : '');
+    setLeaveEnd(soldier.leaveEnd ? format(soldier.leaveEnd, "yyyy-MM-dd'T'HH:mm") : '');
     setIsModalOpen(true);
   };
 
@@ -122,6 +130,31 @@ export function SoldiersPage() {
     return statuses.find((s) => s.id === statusId)?.color || '#6B7280';
   };
 
+  const formatLeaveInfo = (soldier: Soldier) => {
+    if (!soldier.leaveStart && !soldier.leaveEnd) return null;
+    const now = new Date();
+    const start = soldier.leaveStart;
+    const end = soldier.leaveEnd;
+
+    // Check if currently on leave
+    const isOnLeave = start && end && now >= start && now <= end;
+    // Check if leave is upcoming (within 24 hours)
+    const isUpcoming = start && !isOnLeave && start > now && start.getTime() - now.getTime() <= 24 * 60 * 60 * 1000;
+
+    const formatDate = (date: Date) => format(date, 'dd/MM HH:mm');
+
+    if (isOnLeave) {
+      return { text: `ביציאה עד ${formatDate(end!)}`, color: 'text-orange-600 bg-orange-50' };
+    }
+    if (isUpcoming) {
+      return { text: `יוצא ב-${formatDate(start!)}`, color: 'text-blue-600 bg-blue-50' };
+    }
+    if (start && end) {
+      return { text: `${formatDate(start)} - ${formatDate(end)}`, color: 'text-slate-500 bg-slate-50' };
+    }
+    return null;
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -135,6 +168,8 @@ export function SoldiersPage() {
       platoonId: formData.get('platoonId') as string,
       squadId: formData.get('squadId') as string,
       certificateIds: selectedCertificateIds,
+      leaveStart: leaveStart ? new Date(leaveStart) : null,
+      leaveEnd: leaveEnd ? new Date(leaveEnd) : null,
     };
 
     if (editingSoldier) {
@@ -387,15 +422,22 @@ export function SoldiersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span
-                      className="px-2 py-1 rounded text-xs font-medium"
-                      style={{
-                        backgroundColor: `${getStatusColor(soldier.statusId)}20`,
-                        color: getStatusColor(soldier.statusId),
-                      }}
-                    >
-                      {getStatusName(soldier.statusId)}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span
+                        className="px-2 py-1 rounded text-xs font-medium w-fit"
+                        style={{
+                          backgroundColor: `${getStatusColor(soldier.statusId)}20`,
+                          color: getStatusColor(soldier.statusId),
+                        }}
+                      >
+                        {getStatusName(soldier.statusId)}
+                      </span>
+                      {formatLeaveInfo(soldier) && (
+                        <span className={clsx('px-2 py-0.5 rounded text-xs', formatLeaveInfo(soldier)!.color)}>
+                          {formatLeaveInfo(soldier)!.text}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-600">
                     {getPlatoonName(soldier.platoonId)}
@@ -598,6 +640,48 @@ export function SoldiersPage() {
                   </div>
                 </div>
               )}
+
+              {/* Leave Dates */}
+              <div className="border-t border-slate-200 pt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Calendar className="w-4 h-4 text-slate-500" />
+                  <label className="text-sm font-medium text-slate-700">
+                    תקופת יציאה/חופשה
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">מתאריך</label>
+                    <input
+                      type="datetime-local"
+                      value={leaveStart}
+                      onChange={(e) => setLeaveStart(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">עד תאריך</label>
+                    <input
+                      type="datetime-local"
+                      value={leaveEnd}
+                      onChange={(e) => setLeaveEnd(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                  </div>
+                </div>
+                {(leaveStart || leaveEnd) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLeaveStart('');
+                      setLeaveEnd('');
+                    }}
+                    className="mt-2 text-sm text-red-600 hover:text-red-700"
+                  >
+                    נקה תאריכי יציאה
+                  </button>
+                )}
+              </div>
 
               <div className="flex gap-3 pt-4">
                 <button

@@ -28,6 +28,8 @@ function toSoldier(row: {
   status_id: string | null;
   platoon_id: string | null;
   squad_id: string | null;
+  leave_start: string | null;
+  leave_end: string | null;
   created_at: string;
   updated_at: string;
 }, certificateIds: string[]): Soldier {
@@ -41,6 +43,8 @@ function toSoldier(row: {
     platoonId: row.platoon_id || '',
     squadId: row.squad_id || '',
     certificateIds,
+    leaveStart: row.leave_start ? new Date(row.leave_start) : null,
+    leaveEnd: row.leave_end ? new Date(row.leave_end) : null,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
   };
@@ -98,6 +102,8 @@ export const useSoldierStore = create<SoldierState>((set, get) => ({
         status_id: input.statusId || null,
         platoon_id: input.platoonId || null,
         squad_id: input.squadId || null,
+        leave_start: input.leaveStart?.toISOString() || null,
+        leave_end: input.leaveEnd?.toISOString() || null,
       })
       .select()
       .single();
@@ -132,6 +138,8 @@ export const useSoldierStore = create<SoldierState>((set, get) => ({
     if (input.statusId !== undefined) updateData.status_id = input.statusId || null;
     if (input.platoonId !== undefined) updateData.platoon_id = input.platoonId || null;
     if (input.squadId !== undefined) updateData.squad_id = input.squadId || null;
+    if (input.leaveStart !== undefined) updateData.leave_start = input.leaveStart?.toISOString() || null;
+    if (input.leaveEnd !== undefined) updateData.leave_end = input.leaveEnd?.toISOString() || null;
 
     if (Object.keys(updateData).length > 0) {
       const { error } = await supabase

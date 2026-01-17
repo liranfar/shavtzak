@@ -10,13 +10,12 @@ export function Layout() {
     <div className="min-h-screen bg-slate-50">
       <Header onMenuClick={() => setSidebarOpen(true)} />
 
-      <div className="flex">
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        <main className="flex-1 p-4 lg:p-6 overflow-hidden min-w-0">
-          <Outlet />
-        </main>
-      </div>
+      {/* Main content with margin to account for fixed sidebar on desktop */}
+      <main className="p-4 lg:p-6 lg:mr-64">
+        <Outlet />
+      </main>
     </div>
   );
 }
