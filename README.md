@@ -1,5 +1,7 @@
 # שבצ"ק (Shavtzak) - Military Shift Management System
 
+**[מדריך התקנה בעברית](README.he.md)** - למי שרוצה להפעיל עותק עצמאי של המערכת
+
 A modern web application for managing military shift schedules, soldier assignments, and unit organization. Built with React, TypeScript, and Supabase.
 
 ## Features
