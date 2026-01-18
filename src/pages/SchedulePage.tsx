@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
-import { ChevronRight, ChevronLeft, Plus, Users, Clock } from 'lucide-react';
-import { format, addDays, subDays, setHours, setMinutes, startOfDay, differenceInMinutes } from 'date-fns';
+import { ChevronRight, ChevronLeft, Plus, Users, Clock, BarChart3 } from 'lucide-react';
+import { format, addDays, subDays, setHours, setMinutes, startOfDay, differenceInMinutes, subHours } from 'date-fns';
 import { he } from 'date-fns/locale';
 import {
   DndContext,
@@ -45,6 +45,7 @@ export function SchedulePage() {
     startTime: Date;
   } | null>(null);
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
+  const [distributionTimeframe, setDistributionTimeframe] = useState<24 | 48 | 60 | 72>(72);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -72,27 +73,27 @@ export function SchedulePage() {
     return validateDaySchedule(shifts, soldiers);
   }, [shifts, soldiers]);
 
-  // Calculate shift time per soldier for the selected day
-  const soldierShiftStats = useMemo(() => {
-    const dayStart = startOfDay(selectedDate);
-    const dayEnd = addDays(dayStart, 1);
+  // Calculate shift time per soldier for the distribution timeframe (last X hours)
+  const soldierDistributionStats = useMemo(() => {
+    const now = new Date();
+    const periodStart = subHours(now, distributionTimeframe);
 
     const stats = new Map<string, { totalMinutes: number; shifts: Shift[] }>();
 
-    // Filter shifts that overlap with the selected day
-    const dayShifts = shifts.filter((s) => {
+    // Filter shifts that overlap with the timeframe
+    const periodShifts = shifts.filter((s) => {
       const shiftStart = new Date(s.startTime);
       const shiftEnd = new Date(s.endTime);
-      return shiftStart < dayEnd && shiftEnd > dayStart;
+      return shiftStart < now && shiftEnd > periodStart;
     });
 
-    for (const shift of dayShifts) {
+    for (const shift of periodShifts) {
       const shiftStart = new Date(shift.startTime);
       const shiftEnd = new Date(shift.endTime);
 
-      // Calculate the portion of the shift that falls within the selected day
-      const effectiveStart = shiftStart < dayStart ? dayStart : shiftStart;
-      const effectiveEnd = shiftEnd > dayEnd ? dayEnd : shiftEnd;
+      // Calculate the portion of the shift that falls within the timeframe
+      const effectiveStart = shiftStart < periodStart ? periodStart : shiftStart;
+      const effectiveEnd = shiftEnd > now ? now : shiftEnd;
       const minutes = differenceInMinutes(effectiveEnd, effectiveStart);
 
       const existing = stats.get(shift.soldierId) || { totalMinutes: 0, shifts: [] };
@@ -102,9 +103,9 @@ export function SchedulePage() {
     }
 
     return stats;
-  }, [shifts, selectedDate]);
+  }, [shifts, distributionTimeframe]);
 
-  // Group soldiers by platoon with their shift stats
+  // Group soldiers by platoon with their distribution stats (show ALL soldiers, sorted by work hours ascending)
   const soldiersByPlatoon = useMemo(() => {
     const grouped = new Map<string, { platoon: typeof platoons[0] | null; soldiers: Array<{ soldier: Soldier; totalMinutes: number; shifts: Shift[] }> }>();
 
@@ -116,7 +117,7 @@ export function SchedulePage() {
         grouped.set(platoonId, { platoon, soldiers: [] });
       }
 
-      const stats = soldierShiftStats.get(soldier.id) || { totalMinutes: 0, shifts: [] };
+      const stats = soldierDistributionStats.get(soldier.id) || { totalMinutes: 0, shifts: [] };
       grouped.get(platoonId)!.soldiers.push({
         soldier,
         totalMinutes: stats.totalMinutes,
@@ -124,13 +125,13 @@ export function SchedulePage() {
       });
     }
 
-    // Sort soldiers within each platoon by shift time (descending)
+    // Sort soldiers within each platoon by shift time (ascending - least worked first)
     for (const group of grouped.values()) {
-      group.soldiers.sort((a, b) => b.totalMinutes - a.totalMinutes);
+      group.soldiers.sort((a, b) => a.totalMinutes - b.totalMinutes);
     }
 
     return grouped;
-  }, [soldiers, platoons, soldierShiftStats]);
+  }, [soldiers, platoons, soldierDistributionStats]);
 
   const handlePrevDay = () => setSelectedDate(subDays(selectedDate, 1));
   const handleNextDay = () => setSelectedDate(addDays(selectedDate, 1));
@@ -478,10 +479,40 @@ export function SchedulePage() {
 
         {/* Soldier Shift/Rest Distribution by Platoon */}
         <div className="space-y-4">
+          {/* Timeframe selector */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-slate-600" />
+                <h3 className="text-sm font-semibold text-slate-900">התפלגות עבודה/מנוחה</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">טווח זמן:</span>
+                <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+                  {([24, 48, 60, 72] as const).map((hours) => (
+                    <button
+                      key={hours}
+                      onClick={() => setDistributionTimeframe(hours)}
+                      className={clsx(
+                        'px-3 py-1.5 text-xs font-medium transition-colors',
+                        distributionTimeframe === hours
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white text-slate-600 hover:bg-slate-50'
+                      )}
+                    >
+                      {hours} ש׳
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {Array.from(soldiersByPlatoon.entries()).map(([platoonId, { platoon, soldiers: platoonSoldiers }]) => {
-            // Only show platoons that have at least one soldier with shifts
+            // Show all platoons that have soldiers
+            if (platoonSoldiers.length === 0) return null;
+
             const soldiersWithShifts = platoonSoldiers.filter((s) => s.totalMinutes > 0);
-            if (soldiersWithShifts.length === 0) return null;
 
             return (
               <div key={platoonId} className="bg-white rounded-xl border border-slate-200 p-4">
@@ -491,25 +522,28 @@ export function SchedulePage() {
                     {platoon?.name || 'ללא מחלקה'}
                   </h3>
                   <span className="text-xs text-slate-500">
-                    ({soldiersWithShifts.length} חיילים במשמרת)
+                    ({platoonSoldiers.length} חיילים, {soldiersWithShifts.length} במשמרות)
                   </span>
                 </div>
 
                 <div className="space-y-2">
-                  {soldiersWithShifts.map(({ soldier, totalMinutes, shifts: soldierShifts }) => {
+                  {platoonSoldiers.map(({ soldier, totalMinutes, shifts: soldierShifts }) => {
                     const totalHours = totalMinutes / 60;
-                    const restMinutes = 24 * 60 - totalMinutes;
-                    const shiftPercentage = Math.min((totalMinutes / (24 * 60)) * 100, 100);
+                    const restMinutes = distributionTimeframe * 60 - totalMinutes;
+                    const shiftPercentage = Math.min((totalMinutes / (distributionTimeframe * 60)) * 100, 100);
 
-                    // Determine bar color based on shift load
+                    // Determine bar color based on shift load (proportional to timeframe)
+                    const loadRatio = totalMinutes / (distributionTimeframe * 60);
                     let barColor = platoon?.color || '#3B82F6';
                     let statusColor = 'text-slate-600';
-                    if (totalHours >= 12) {
+                    if (loadRatio >= 0.5) { // 50%+ of time in shifts
                       barColor = '#EF4444'; // Red for heavy load
                       statusColor = 'text-red-600';
-                    } else if (totalHours >= 8) {
+                    } else if (loadRatio >= 0.33) { // 33%+ of time in shifts
                       barColor = '#F59E0B'; // Orange for moderate load
                       statusColor = 'text-orange-600';
+                    } else if (totalMinutes === 0) {
+                      barColor = '#E2E8F0'; // Light gray for no shifts
                     }
 
                     return (
@@ -525,13 +559,16 @@ export function SchedulePage() {
                           <div
                             className="h-full rounded-full transition-all duration-300"
                             style={{
-                              width: `${shiftPercentage}%`,
+                              width: `${Math.max(shiftPercentage, totalMinutes > 0 ? 2 : 0)}%`,
                               backgroundColor: barColor,
                             }}
                           />
                           {/* Time labels inside bar */}
                           <div className="absolute inset-0 flex items-center justify-between px-2 text-[10px]">
-                            <span className={shiftPercentage > 15 ? 'text-white font-medium' : 'text-slate-600 font-medium'}>
+                            <span className={clsx(
+                              'font-medium',
+                              shiftPercentage > 15 ? 'text-white' : 'text-slate-600'
+                            )}>
                               {totalHours.toFixed(1)} ש׳
                             </span>
                             {shiftPercentage < 85 && (
@@ -557,10 +594,10 @@ export function SchedulePage() {
                 {/* Platoon summary */}
                 <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                   <span>
-                    סה״כ: {(soldiersWithShifts.reduce((sum, s) => sum + s.totalMinutes, 0) / 60).toFixed(1)} שעות משמרת
+                    סה״כ: {(platoonSoldiers.reduce((sum, s) => sum + s.totalMinutes, 0) / 60).toFixed(1)} שעות משמרת
                   </span>
                   <span>
-                    ממוצע: {(soldiersWithShifts.reduce((sum, s) => sum + s.totalMinutes, 0) / soldiersWithShifts.length / 60).toFixed(1)} ש׳ לחייל
+                    ממוצע: {platoonSoldiers.length > 0 ? (platoonSoldiers.reduce((sum, s) => sum + s.totalMinutes, 0) / platoonSoldiers.length / 60).toFixed(1) : '0'} ש׳ לחייל
                   </span>
                 </div>
               </div>

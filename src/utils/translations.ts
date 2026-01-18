@@ -2,7 +2,7 @@
 
 export const labels = {
   // App
-  appName: 'שווצק',
+  appName: 'שבצ״ק',
   appDescription: 'מערכת ניהול משמרות',
 
   // Navigation
