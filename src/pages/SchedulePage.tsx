@@ -586,6 +586,8 @@ export function SchedulePage() {
           certificates={certificates}
           statuses={statuses}
           existingShifts={shifts}
+          allShifts={shifts}
+          missions={missions}
           onAssign={handleAssignSoldiers}
           onClose={() => setModalData(null)}
         />

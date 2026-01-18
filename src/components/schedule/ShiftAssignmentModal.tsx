@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import { X, AlertTriangle, AlertCircle, Clock, User, Users, Check, Award, Info, Search, Calendar } from 'lucide-react';
-import { format, addMinutes, differenceInHours } from 'date-fns';
+import { X, AlertTriangle, AlertCircle, Clock, User, Users, Check, Award, Info, Search, Calendar, ChevronDown, ChevronUp, History, RefreshCw } from 'lucide-react';
+import { format, addMinutes, differenceInHours, subDays, differenceInDays } from 'date-fns';
 import { he } from 'date-fns/locale';
 import type { Mission, Soldier, Shift, Platoon, Certificate, SoldierStatusDef } from '../../types/entities';
 import { suggestSoldiersForShift } from '../../services/fairnessCalculator';
@@ -21,6 +21,11 @@ const DURATION_OPTIONS = [
   { value: 720, label: '12 שעות' },
 ];
 
+// Number of days to look back for recent shifts
+const RECENT_DAYS = 7;
+// Number of days to consider "same mission recently" warning
+const SAME_MISSION_WARNING_DAYS = 3;
+
 interface ShiftAssignmentModalProps {
   mission: Mission;
   startTime: Date;
@@ -29,6 +34,8 @@ interface ShiftAssignmentModalProps {
   certificates: Certificate[];
   statuses: SoldierStatusDef[];
   existingShifts: Shift[];
+  allShifts: Shift[]; // All shifts for history lookup
+  missions: Mission[]; // All missions for name lookup
   onAssign: (soldierIds: string[], startTime: Date, endTime: Date) => void;
   onClose: () => void;
 }
@@ -41,15 +48,83 @@ export function ShiftAssignmentModal({
   certificates,
   statuses,
   existingShifts,
+  allShifts,
+  missions,
   onAssign,
   onClose,
 }: ShiftAssignmentModalProps) {
   const [selectedSoldierIds, setSelectedSoldierIds] = useState<Set<string>>(new Set());
   const [durationMinutes, setDurationMinutes] = useState(120); // Default 2 hours
   const [searchTerm, setSearchTerm] = useState('');
+  const [expandedSoldierIds, setExpandedSoldierIds] = useState<Set<string>>(new Set());
+  const [expandAll, setExpandAll] = useState(false);
 
   const startTime = initialStartTime;
   const endTime = addMinutes(startTime, durationMinutes);
+
+  // Calculate recent shifts per soldier (last 7 days)
+  const recentShiftsBySoldier = useMemo(() => {
+    const cutoffDate = subDays(startTime, RECENT_DAYS);
+    const result = new Map<string, Array<{ shift: Shift; missionName: string; daysAgo: number }>>();
+
+    for (const shift of allShifts) {
+      const shiftStart = new Date(shift.startTime);
+      if (shiftStart >= cutoffDate && shiftStart < startTime) {
+        const missionObj = missions.find(m => m.id === shift.missionId);
+        const missionName = missionObj?.name || 'משימה לא ידועה';
+        const daysAgo = differenceInDays(startTime, shiftStart);
+
+        if (!result.has(shift.soldierId)) {
+          result.set(shift.soldierId, []);
+        }
+        result.get(shift.soldierId)!.push({ shift, missionName, daysAgo });
+      }
+    }
+
+    // Sort each soldier's shifts by date (most recent first)
+    for (const shifts of result.values()) {
+      shifts.sort((a, b) => new Date(b.shift.startTime).getTime() - new Date(a.shift.startTime).getTime());
+    }
+
+    return result;
+  }, [allShifts, missions, startTime]);
+
+  // Check if soldier did this same mission recently (within SAME_MISSION_WARNING_DAYS)
+  const getSameMissionWarning = (soldierId: string): { daysAgo: number; count: number } | null => {
+    const recentShifts = recentShiftsBySoldier.get(soldierId) || [];
+    const sameMissionShifts = recentShifts.filter(
+      rs => rs.shift.missionId === mission.id && rs.daysAgo <= SAME_MISSION_WARNING_DAYS
+    );
+    if (sameMissionShifts.length > 0) {
+      return {
+        daysAgo: Math.min(...sameMissionShifts.map(s => s.daysAgo)),
+        count: sameMissionShifts.length,
+      };
+    }
+    return null;
+  };
+
+  const toggleSoldierExpand = (soldierId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newExpanded = new Set(expandedSoldierIds);
+    if (newExpanded.has(soldierId)) {
+      newExpanded.delete(soldierId);
+    } else {
+      newExpanded.add(soldierId);
+    }
+    setExpandedSoldierIds(newExpanded);
+  };
+
+  const toggleExpandAll = () => {
+    if (expandAll) {
+      setExpandedSoldierIds(new Set());
+    } else {
+      // Expand all soldiers that have recent shifts
+      const allWithHistory = new Set(recentShiftsBySoldier.keys());
+      setExpandedSoldierIds(allWithHistory);
+    }
+    setExpandAll(!expandAll);
+  };
 
   // Get suggested soldiers sorted by availability (show all platoons)
   const suggestions = useMemo(() => {
@@ -323,9 +398,9 @@ export function ShiftAssignmentModal({
           )}
         </div>
 
-        {/* Search bar */}
-        <div className="px-4 pt-3">
-          <div className="relative">
+        {/* Search bar and expand all */}
+        <div className="px-4 pt-3 flex gap-2">
+          <div className="relative flex-1">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
@@ -335,6 +410,19 @@ export function ShiftAssignmentModal({
               className="w-full pr-10 pl-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          <button
+            onClick={toggleExpandAll}
+            className={clsx(
+              'flex items-center gap-1 px-3 py-2 text-xs font-medium rounded-lg border transition-colors',
+              expandAll
+                ? 'bg-blue-50 border-blue-200 text-blue-700'
+                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+            )}
+            title={expandAll ? 'סגור הכל' : 'הצג היסטוריה'}
+          >
+            <History className="w-4 h-4" />
+            {expandAll ? 'סגור' : 'היסטוריה'}
+          </button>
         </div>
 
         {/* Soldier list grouped by platoon */}
@@ -356,112 +444,165 @@ export function ShiftAssignmentModal({
                   // Current status (like "at home") is temporary and should only show a warning for future shifts
                   const isDisabled = hasConflict || isOnLeave;
                   const soldierCerts = getSoldierCertificateNames(soldier);
+                  const sameMissionWarning = getSameMissionWarning(soldier.id);
+                  const recentShifts = recentShiftsBySoldier.get(soldier.id) || [];
+                  const isExpanded = expandedSoldierIds.has(soldier.id) || expandAll;
 
                   return (
-                    <button
-                      key={soldier.id}
-                      onClick={() => toggleSoldier(soldier.id, isDisabled)}
-                      disabled={isDisabled}
-                      className={clsx(
-                        'w-full flex items-center gap-3 p-2 rounded-lg border text-right transition-colors',
-                        isSelected
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-slate-200 hover:bg-slate-50',
-                        hasConflict && 'opacity-50 cursor-not-allowed bg-red-50 border-red-200',
-                        isOnLeave && !hasConflict && 'opacity-50 cursor-not-allowed bg-purple-50 border-purple-200',
-                        isCurrentlyUnavailable && !hasConflict && !isOnLeave && !isSelected && 'bg-amber-50 border-amber-200'
-                      )}
-                    >
-                      {/* Checkbox */}
-                      <div className={clsx(
-                        'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0',
-                        isSelected ? 'bg-blue-500 border-blue-500' : 'border-slate-300',
-                        hasConflict && 'border-red-300 bg-red-100',
-                        isOnLeave && !hasConflict && 'border-purple-300 bg-purple-100'
-                      )}>
-                        {isSelected && <Check className="w-3 h-3 text-white" />}
-                      </div>
+                    <div key={soldier.id} className="rounded-lg border border-slate-200 overflow-hidden">
+                      <button
+                        onClick={() => toggleSoldier(soldier.id, isDisabled)}
+                        disabled={isDisabled}
+                        className={clsx(
+                          'w-full flex items-center gap-3 p-2 text-right transition-colors',
+                          isSelected
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'hover:bg-slate-50',
+                          hasConflict && 'opacity-50 cursor-not-allowed bg-red-50',
+                          isOnLeave && !hasConflict && 'opacity-50 cursor-not-allowed bg-purple-50',
+                          isCurrentlyUnavailable && !hasConflict && !isOnLeave && !isSelected && 'bg-amber-50'
+                        )}
+                      >
+                        {/* Checkbox */}
+                        <div className={clsx(
+                          'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0',
+                          isSelected ? 'bg-blue-500 border-blue-500' : 'border-slate-300',
+                          hasConflict && 'border-red-300 bg-red-100',
+                          isOnLeave && !hasConflict && 'border-purple-300 bg-purple-100'
+                        )}>
+                          {isSelected && <Check className="w-3 h-3 text-white" />}
+                        </div>
 
-                      <User className="w-4 h-4 text-slate-400 shrink-0" />
+                        <User className="w-4 h-4 text-slate-400 shrink-0" />
 
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium text-slate-900 text-sm">{soldier.name}</span>
-                          <span
-                            className="px-1.5 py-0.5 rounded text-xs font-medium"
-                            style={{
-                              backgroundColor: `${getStatusColor(soldier.statusId)}20`,
-                              color: getStatusColor(soldier.statusId),
-                            }}
-                          >
-                            {getStatusName(soldier.statusId)}
-                          </span>
-                          {hasConflict && (
-                            <span className="flex items-center gap-1 text-xs text-red-600">
-                              <AlertCircle className="w-3 h-3" />
-                              תפוס
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-slate-900 text-sm">{soldier.name}</span>
+                            <span
+                              className="px-1.5 py-0.5 rounded text-xs font-medium"
+                              style={{
+                                backgroundColor: `${getStatusColor(soldier.statusId)}20`,
+                                color: getStatusColor(soldier.statusId),
+                              }}
+                            >
+                              {getStatusName(soldier.statusId)}
                             </span>
-                          )}
-                          {isOnLeave && !hasConflict && (
-                            <span className="flex items-center gap-1 text-xs text-purple-600">
-                              <Calendar className="w-3 h-3" />
-                              {leaveWarning.message}
-                            </span>
-                          )}
-                          {isCurrentlyUnavailable && !hasConflict && !isOnLeave && (
-                            <span className="flex items-center gap-1 text-xs text-amber-600">
-                              <AlertTriangle className="w-3 h-3" />
-                              כרגע {getStatusName(soldier.statusId)}
-                            </span>
-                          )}
-                          {leaveWarning.type === 'leavingSoon' && !hasConflict && !isOnLeave && (
-                            <span className="flex items-center gap-1 text-xs text-orange-600">
-                              <Calendar className="w-3 h-3" />
-                              {leaveWarning.message}
-                            </span>
-                          )}
-                          {leaveWarning.type === 'returningRecently' && !hasConflict && !isOnLeave && (
-                            <span className="flex items-center gap-1 text-xs text-blue-600">
-                              <Calendar className="w-3 h-3" />
-                              {leaveWarning.message}
-                            </span>
-                          )}
-                          {restViolationType === 'error' && !hasConflict && !isCurrentlyUnavailable && !isOnLeave && (
-                            <span className="flex items-center gap-1 text-xs text-red-600">
-                              <AlertCircle className="w-3 h-3" />
-                              מנוחה קריטית
-                            </span>
-                          )}
-                          {restViolationType === 'warning' && !hasConflict && !isCurrentlyUnavailable && !isOnLeave && (
-                            <span className="flex items-center gap-1 text-xs text-orange-600">
-                              <AlertTriangle className="w-3 h-3" />
-                              מנוחה
-                            </span>
+                            {/* Same mission recently badge */}
+                            {sameMissionWarning && (
+                              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-pink-100 text-pink-700 rounded text-xs font-medium">
+                                <RefreshCw className="w-3 h-3" />
+                                {sameMissionWarning.daysAgo === 0 ? 'היום' : sameMissionWarning.daysAgo === 1 ? 'אתמול' : `לפני ${sameMissionWarning.daysAgo} ימים`}
+                              </span>
+                            )}
+                            {hasConflict && (
+                              <span className="flex items-center gap-1 text-xs text-red-600">
+                                <AlertCircle className="w-3 h-3" />
+                                תפוס
+                              </span>
+                            )}
+                            {isOnLeave && !hasConflict && (
+                              <span className="flex items-center gap-1 text-xs text-purple-600">
+                                <Calendar className="w-3 h-3" />
+                                {leaveWarning.message}
+                              </span>
+                            )}
+                            {isCurrentlyUnavailable && !hasConflict && !isOnLeave && (
+                              <span className="flex items-center gap-1 text-xs text-amber-600">
+                                <AlertTriangle className="w-3 h-3" />
+                                כרגע {getStatusName(soldier.statusId)}
+                              </span>
+                            )}
+                            {leaveWarning.type === 'leavingSoon' && !hasConflict && !isOnLeave && (
+                              <span className="flex items-center gap-1 text-xs text-orange-600">
+                                <Calendar className="w-3 h-3" />
+                                {leaveWarning.message}
+                              </span>
+                            )}
+                            {leaveWarning.type === 'returningRecently' && !hasConflict && !isOnLeave && (
+                              <span className="flex items-center gap-1 text-xs text-blue-600">
+                                <Calendar className="w-3 h-3" />
+                                {leaveWarning.message}
+                              </span>
+                            )}
+                            {restViolationType === 'error' && !hasConflict && !isCurrentlyUnavailable && !isOnLeave && (
+                              <span className="flex items-center gap-1 text-xs text-red-600">
+                                <AlertCircle className="w-3 h-3" />
+                                מנוחה קריטית
+                              </span>
+                            )}
+                            {restViolationType === 'warning' && !hasConflict && !isCurrentlyUnavailable && !isOnLeave && (
+                              <span className="flex items-center gap-1 text-xs text-orange-600">
+                                <AlertTriangle className="w-3 h-3" />
+                                מנוחה
+                              </span>
+                            )}
+                          </div>
+                          {/* Soldier certificates */}
+                          {soldierCerts.length > 0 && (
+                            <div className="flex gap-1 mt-1 flex-wrap">
+                              {soldierCerts.map((certName, i) => {
+                                const isRequired = requiredCertNames.includes(certName);
+                                return (
+                                  <span
+                                    key={i}
+                                    className={clsx(
+                                      'px-1.5 py-0.5 rounded text-[10px] font-medium',
+                                      isRequired
+                                        ? 'bg-green-100 text-green-700 border border-green-300'
+                                        : 'bg-slate-100 text-slate-600'
+                                    )}
+                                  >
+                                    {certName}
+                                  </span>
+                                );
+                              })}
+                            </div>
                           )}
                         </div>
-                        {/* Soldier certificates */}
-                        {soldierCerts.length > 0 && (
-                          <div className="flex gap-1 mt-1 flex-wrap">
-                            {soldierCerts.map((certName, i) => {
-                              const isRequired = requiredCertNames.includes(certName);
-                              return (
-                                <span
-                                  key={i}
-                                  className={clsx(
-                                    'px-1.5 py-0.5 rounded text-[10px] font-medium',
-                                    isRequired
-                                      ? 'bg-green-100 text-green-700 border border-green-300'
-                                      : 'bg-slate-100 text-slate-600'
-                                  )}
-                                >
-                                  {certName}
-                                </span>
-                              );
-                            })}
+
+                        {/* Expand button for history */}
+                        {recentShifts.length > 0 && (
+                          <div
+                            onClick={(e) => toggleSoldierExpand(soldier.id, e)}
+                            className="p-1 hover:bg-slate-200 rounded shrink-0"
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="w-4 h-4 text-slate-400" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 text-slate-400" />
+                            )}
                           </div>
                         )}
-                      </div>
-                    </button>
+                      </button>
+
+                      {/* Expandable recent shifts history */}
+                      {isExpanded && recentShifts.length > 0 && (
+                        <div className="bg-slate-50 border-t border-slate-200 px-3 py-2">
+                          <div className="text-[10px] text-slate-500 mb-1 font-medium">משמרות אחרונות (7 ימים):</div>
+                          <div className="space-y-1">
+                            {recentShifts.map((rs, idx) => (
+                              <div
+                                key={idx}
+                                className={clsx(
+                                  'flex items-center gap-2 text-xs px-2 py-1 rounded',
+                                  rs.shift.missionId === mission.id ? 'bg-pink-50 text-pink-700' : 'bg-white text-slate-600'
+                                )}
+                              >
+                                <span className="font-medium">{rs.missionName}</span>
+                                <span className="text-slate-400">|</span>
+                                <span>{format(new Date(rs.shift.startTime), 'EEEE dd/MM', { locale: he })}</span>
+                                <span className="text-slate-400">
+                                  {format(new Date(rs.shift.startTime), 'HH:mm')} - {format(new Date(rs.shift.endTime), 'HH:mm')}
+                                </span>
+                                {rs.shift.missionId === mission.id && (
+                                  <span className="mr-auto text-pink-600 text-[10px]">אותה משימה</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
