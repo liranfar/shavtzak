@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { X, AlertTriangle, AlertCircle, Clock, User, Users, Check, Award, Info, Search, Calendar, ChevronDown, ChevronUp, History, RefreshCw } from 'lucide-react';
-import { format, addMinutes, differenceInHours, subDays, differenceInDays } from 'date-fns';
+import { format, addMinutes, differenceInHours, differenceInMinutes, subDays, differenceInDays } from 'date-fns';
 import { he } from 'date-fns/locale';
 import type { Mission, Soldier, Shift, Platoon, Certificate, SoldierStatusDef } from '../../types/entities';
 import { suggestSoldiersForShift } from '../../services/fairnessCalculator';
@@ -19,6 +19,7 @@ const DURATION_OPTIONS = [
   { value: 360, label: '6 שעות' },
   { value: 480, label: '8 שעות' },
   { value: 720, label: '12 שעות' },
+  { value: 1440, label: '24 שעות' },
 ];
 
 // Number of days to look back for recent shifts
@@ -36,6 +37,7 @@ interface ShiftAssignmentModalProps {
   existingShifts: Shift[];
   allShifts: Shift[]; // All shifts for history lookup
   missions: Mission[]; // All missions for name lookup
+  currentSlotShifts?: Shift[]; // Shifts already assigned at this slot
   onAssign: (soldierIds: string[], startTime: Date, endTime: Date) => void;
   onClose: () => void;
 }
@@ -50,11 +52,25 @@ export function ShiftAssignmentModal({
   existingShifts,
   allShifts,
   missions,
+  currentSlotShifts = [],
   onAssign,
   onClose,
 }: ShiftAssignmentModalProps) {
-  const [selectedSoldierIds, setSelectedSoldierIds] = useState<Set<string>>(new Set());
-  const [durationMinutes, setDurationMinutes] = useState(120); // Default 2 hours
+  // Pre-select soldiers from existing shifts at this slot
+  const [selectedSoldierIds, setSelectedSoldierIds] = useState<Set<string>>(() => {
+    return new Set(currentSlotShifts.map(s => s.soldierId));
+  });
+  // Default duration: use existing shift duration if editing, otherwise 2 hours
+  const [durationMinutes, setDurationMinutes] = useState(() => {
+    if (currentSlotShifts.length > 0) {
+      const firstShift = currentSlotShifts[0];
+      const duration = differenceInMinutes(new Date(firstShift.endTime), new Date(firstShift.startTime));
+      // Find matching duration option or default to 120
+      const matchingOption = DURATION_OPTIONS.find(opt => opt.value === duration);
+      return matchingOption ? duration : 120;
+    }
+    return 120;
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedSoldierIds, setExpandedSoldierIds] = useState<Set<string>>(new Set());
   const [expandAll, setExpandAll] = useState(false);

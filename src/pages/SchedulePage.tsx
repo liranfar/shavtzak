@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { ChevronRight, ChevronLeft, Plus, Users, Clock, BarChart3 } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Plus, Pencil, Users, Clock, BarChart3 } from 'lucide-react';
 import { format, addDays, subDays, setHours, setMinutes, startOfDay, differenceInMinutes, subHours } from 'date-fns';
 import { he } from 'date-fns/locale';
 import {
@@ -43,6 +43,7 @@ export function SchedulePage() {
   const [modalData, setModalData] = useState<{
     mission: Mission;
     startTime: Date;
+    currentSlotShifts: Shift[];
   } | null>(null);
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
   const [distributionTimeframe, setDistributionTimeframe] = useState<24 | 48 | 60 | 72>(72);
@@ -209,7 +210,17 @@ export function SchedulePage() {
 
   const handleCellClick = (mission: Mission, hour: number, minute: number) => {
     const startTime = setMinutes(setHours(startOfDay(selectedDate), hour), minute);
-    setModalData({ mission, startTime });
+    // Get shifts that cover this slot for this mission
+    const currentSlotShifts = shifts.filter((s) => {
+      const shiftStart = new Date(s.startTime);
+      const shiftEnd = new Date(s.endTime);
+      return (
+        s.missionId === mission.id &&
+        shiftStart <= startTime &&
+        shiftEnd > startTime
+      );
+    });
+    setModalData({ mission, startTime, currentSlotShifts });
   };
 
   const handleAssignSoldiers = async (soldierIds: string[], startTime: Date, endTime: Date) => {
@@ -416,7 +427,7 @@ export function SchedulePage() {
                                   );
                                 })}
 
-                                {/* Add button - always visible for multiple assignments */}
+                                {/* Add/Edit button - always visible for multiple assignments */}
                                 <button
                                   onClick={() => handleCellClick(mission, slot.hour, slot.minute)}
                                   className={clsx(
@@ -425,12 +436,13 @@ export function SchedulePage() {
                                       ? 'h-5 hover:bg-blue-100 opacity-40 hover:opacity-100'
                                       : 'h-10 hover:bg-slate-100'
                                   )}
-                                  title="הוסף שיבוץ"
+                                  title={hasShifts ? 'ערוך שיבוץ' : 'הוסף שיבוץ'}
                                 >
-                                  <Plus className={clsx(
-                                    'text-slate-300 hover:text-blue-500',
-                                    hasShifts ? 'w-3 h-3' : 'w-4 h-4'
-                                  )} />
+                                  {hasShifts ? (
+                                    <Pencil className="w-3 h-3 text-slate-300 hover:text-blue-500" />
+                                  ) : (
+                                    <Plus className="w-4 h-4 text-slate-300 hover:text-blue-500" />
+                                  )}
                                 </button>
                               </div>
                             </td>
@@ -625,6 +637,7 @@ export function SchedulePage() {
           existingShifts={shifts}
           allShifts={shifts}
           missions={missions}
+          currentSlotShifts={modalData.currentSlotShifts}
           onAssign={handleAssignSoldiers}
           onClose={() => setModalData(null)}
         />
