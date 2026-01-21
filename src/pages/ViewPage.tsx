@@ -100,41 +100,42 @@ export function ViewPage() {
       .map(([time, shifts]) => ({ time, shifts }));
   }, [shiftsForDay, missions, soldiers]);
 
-  // Group shifts by time slot AND mission (hierarchical)
-  const shiftsByTimeAndMission = useMemo(() => {
+  // Group shifts by mission AND time slot (Mission → TimeSlot → Soldiers)
+  const shiftsByMissionAndTime = useMemo(() => {
     const grouped = new Map<string, Map<string, typeof shiftsForDay>>();
 
     for (const shift of shiftsForDay) {
       const startTime = new Date(shift.startTime);
-      const timeKey = format(startTime, 'HH:00');
+      const timeKey = format(startTime, 'HH:mm');
       const missionId = shift.missionId;
 
-      if (!grouped.has(timeKey)) {
-        grouped.set(timeKey, new Map());
+      if (!grouped.has(missionId)) {
+        grouped.set(missionId, new Map());
       }
-      const missionMap = grouped.get(timeKey)!;
+      const timeMap = grouped.get(missionId)!;
 
-      if (!missionMap.has(missionId)) {
-        missionMap.set(missionId, []);
+      if (!timeMap.has(timeKey)) {
+        timeMap.set(timeKey, []);
       }
-      missionMap.get(missionId)!.push(shift);
+      timeMap.get(timeKey)!.push(shift);
     }
 
-    // Sort soldiers within each mission group
-    for (const missionMap of grouped.values()) {
-      for (const shifts of missionMap.values()) {
+    // Sort soldiers within each time slot
+    for (const timeMap of grouped.values()) {
+      for (const shifts of timeMap.values()) {
         shifts.sort((a, b) => getSoldierName(a.soldierId).localeCompare(getSoldierName(b.soldierId)));
       }
     }
 
-    // Convert to sorted array
+    // Convert to sorted array (missions sorted by name, time slots sorted chronologically)
     return Array.from(grouped.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([time, missionMap]) => ({
-        time,
-        missions: Array.from(missionMap.entries())
-          .sort((a, b) => getMissionName(a[0]).localeCompare(getMissionName(b[0])))
-          .map(([missionId, shifts]) => ({ missionId, missionName: getMissionName(missionId), shifts }))
+      .sort((a, b) => getMissionName(a[0]).localeCompare(getMissionName(b[0])))
+      .map(([missionId, timeMap]) => ({
+        missionId,
+        missionName: getMissionName(missionId),
+        timeSlots: Array.from(timeMap.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([time, shifts]) => ({ time, shifts }))
       }));
   }, [shiftsForDay, missions, soldiers]);
 
@@ -419,8 +420,8 @@ export function ViewPage() {
                   : 'bg-white text-slate-600 hover:bg-slate-50'
               )}
             >
-              <Clock className="w-3.5 h-3.5" />
-              שעה + משימה
+              <List className="w-3.5 h-3.5" />
+              משימה + שעה
             </button>
             <button
               onClick={() => setViewMode('mission')}
@@ -450,34 +451,36 @@ export function ViewPage() {
         </div>
       </div>
 
-      {/* Assignments by Time Slot + Mission (Combined) */}
+      {/* Assignments by Mission + Time Slot (Combined) */}
       {viewMode === 'both' && (
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <h3 className="text-sm font-semibold text-slate-900 mb-3">
             שיבוצים ליום זה ({shiftsForDay.length} משמרות)
           </h3>
-          <div className="space-y-4">
-            {shiftsByTimeAndMission.map(({ time, missions: timeMissions }) => (
-              <div key={time} className="border-r-4 border-blue-500 pr-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <Clock className="w-4 h-4 text-blue-600" />
-                  <h4 className="font-semibold text-slate-900">{time}</h4>
-                  <span className="text-xs text-slate-500">
-                    ({timeMissions.reduce((sum, m) => sum + m.shifts.length, 0)} משמרות)
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {shiftsByMissionAndTime.map(({ missionId, missionName, timeSlots }) => (
+              <div key={missionId} className="p-3 bg-slate-50 rounded-lg">
+                <h4 className="font-semibold text-slate-900 text-sm mb-3 pb-2 border-b border-slate-200">
+                  {missionName}
+                  <span className="text-xs text-slate-500 font-normal mr-2">
+                    ({timeSlots.reduce((sum, ts) => sum + ts.shifts.length, 0)} משמרות)
                   </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mr-2">
-                  {timeMissions.map(({ missionId, missionName, shifts: missionShifts }) => (
-                    <div key={missionId} className="p-3 bg-slate-50 rounded-lg">
-                      <h5 className="font-medium text-slate-900 text-sm mb-2">{missionName}</h5>
+                </h4>
+                <div className="space-y-3">
+                  {timeSlots.map(({ time, shifts: slotShifts }) => (
+                    <div key={time} className="border-r-2 border-blue-400 pr-2">
+                      <div className="flex items-center gap-1 mb-1">
+                        <Clock className="w-3 h-3 text-blue-500" />
+                        <span className="text-xs font-medium text-blue-700">{time}</span>
+                      </div>
                       <div className="space-y-1">
-                        {missionShifts.map((shift) => {
+                        {slotShifts.map((shift) => {
                           const platoonColor = getPlatoonColor(shift.soldierId);
                           const platoonName = getPlatoonName(shift.soldierId);
                           return (
                             <div
                               key={shift.id}
-                              className="flex items-center gap-2 text-xs p-2 rounded border"
+                              className="flex items-center gap-2 text-xs p-1.5 rounded border"
                               style={{
                                 backgroundColor: platoonColor ? `${platoonColor}15` : '#F8FAFC',
                                 borderColor: platoonColor ? `${platoonColor}40` : '#E2E8F0',
@@ -488,14 +491,12 @@ export function ViewPage() {
                                 style={{ backgroundColor: platoonColor || '#64748B' }}
                               />
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium">{getSoldierName(shift.soldierId)}</span>
-                                  <span className="text-slate-500">({platoonName})</span>
-                                </div>
-                                <span className="text-slate-500">
-                                  {format(new Date(shift.startTime), 'HH:mm')} - {format(new Date(shift.endTime), 'HH:mm')}
-                                </span>
+                                <span className="font-medium">{getSoldierName(shift.soldierId)}</span>
+                                <span className="text-slate-500 mr-1">({platoonName})</span>
                               </div>
+                              <span className="text-slate-400 text-[10px]">
+                                עד {format(new Date(shift.endTime), 'HH:mm')}
+                              </span>
                             </div>
                           );
                         })}
