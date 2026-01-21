@@ -19,7 +19,12 @@ const DURATION_OPTIONS = [
   { value: 360, label: '6 שעות' },
   { value: 480, label: '8 שעות' },
   { value: 720, label: '12 שעות' },
-  { value: 1440, label: '24 שעות' },
+  { value: 1440, label: '24 שעות (יום)' },
+  { value: 2880, label: '2 ימים' },
+  { value: 4320, label: '3 ימים' },
+  { value: 5760, label: '4 ימים' },
+  { value: 7200, label: '5 ימים' },
+  { value: 10080, label: 'שבוע' },
 ];
 
 // Number of days to look back for recent shifts
@@ -359,8 +364,17 @@ export function ShiftAssignmentModal({
           <div className="flex items-center gap-2 text-sm text-slate-600">
             <Clock className="w-4 h-4" />
             <span>
-              {format(startTime, 'EEEE, d בMMMM', { locale: he })} | {' '}
-              {format(startTime, 'HH:mm')} - {format(endTime, 'HH:mm')}
+              {durationMinutes >= 1440 ? (
+                // Multi-day format
+                <>
+                  {format(startTime, 'EEEE d/MM HH:mm', { locale: he })} - {format(endTime, 'EEEE d/MM HH:mm', { locale: he })}
+                </>
+              ) : (
+                // Same-day format
+                <>
+                  {format(startTime, 'EEEE, d בMMMM', { locale: he })} | {format(startTime, 'HH:mm')} - {format(endTime, 'HH:mm')}
+                </>
+              )}
             </span>
           </div>
 
