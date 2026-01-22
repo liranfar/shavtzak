@@ -5,25 +5,12 @@ const TEST_EMAIL = process.env.E2E_TEST_EMAIL || 'test@example.com';
 const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD || 'password123';
 
 /**
- * Fill credentials without exposing them in logs/traces
- * Uses page.evaluate to set values directly without logging
+ * Fill credentials using standard Playwright fill
+ * Note: Values may appear in traces, use test-only credentials
  */
 async function fillCredentials(page: Page, email: string, password: string) {
-  await page.evaluate(
-    ({ email, password }) => {
-      const emailInput = document.getElementById('email') as HTMLInputElement;
-      const passwordInput = document.getElementById('password') as HTMLInputElement;
-      if (emailInput) {
-        emailInput.value = email;
-        emailInput.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-      if (passwordInput) {
-        passwordInput.value = password;
-        passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-    },
-    { email, password }
-  );
+  await page.getByLabel('אימייל').fill(email);
+  await page.getByLabel('סיסמה').fill(password);
 }
 
 test.describe('Login Page', () => {
@@ -63,12 +50,12 @@ test.describe('Login Page', () => {
     const emailInput = page.getByLabel('אימייל');
     const passwordInput = page.getByLabel('סיסמה');
 
-    // Fill credentials (masked - not shown in logs)
+    // Fill credentials
     await fillCredentials(page, TEST_EMAIL, TEST_PASSWORD);
 
-    // Verify fields have values (without exposing actual values)
-    await expect(emailInput).not.toHaveValue('');
-    await expect(passwordInput).not.toHaveValue('');
+    // Verify fields have the expected values
+    await expect(emailInput).toHaveValue(TEST_EMAIL);
+    await expect(passwordInput).toHaveValue(TEST_PASSWORD);
   });
 
   test('should handle form submission', async ({ page }) => {

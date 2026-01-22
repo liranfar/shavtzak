@@ -2,52 +2,25 @@ import { test, expect } from '@playwright/test';
 
 /**
  * Navigation tests - tests the main app navigation and layout
- * These tests require authentication, so they mock the auth state
  */
 test.describe('App Navigation', () => {
-  test.beforeEach(async ({ page }) => {
-    // Mock the Supabase auth state before navigating
-    await page.addInitScript(() => {
-      // Mock the auth state in localStorage
-      const mockAuthData = {
-        currentSession: {
-          access_token: 'mock-token',
-          refresh_token: 'mock-refresh',
-          expires_in: 3600,
-          token_type: 'bearer',
-          user: {
-            id: 'test-user-id',
-            email: 'test@example.com',
-            role: 'authenticated',
-          },
-        },
-        expiresAt: Date.now() + 3600000,
-      };
-      
-      // Supabase stores auth in localStorage with a key pattern
-      const supabaseKey = Object.keys(localStorage).find(k => k.includes('supabase'));
-      if (supabaseKey) {
-        localStorage.setItem(supabaseKey, JSON.stringify(mockAuthData));
-      }
-    });
-  });
-
   test('should show login page when not authenticated', async ({ page }) => {
-    // Clear any mock and go to the page
     await page.goto('/');
     
-    // Should show login page elements when not authenticated
-    // (The mock may or may not take effect depending on timing)
-    const loginVisible = await page.getByText('שבצ"ק').isVisible().catch(() => false);
-    expect(loginVisible).toBeTruthy();
+    // Wait for the page to load (either login or loading state)
+    await page.waitForLoadState('networkidle');
+    
+    // Should show login page title
+    await expect(page.getByText('שבצ"ק')).toBeVisible({ timeout: 10000 });
   });
 
   test('login page should have proper structure', async ({ page }) => {
     await page.goto('/');
+    await page.waitForLoadState('networkidle');
     
     // Check for Shield icon container (the login logo area)
     const logoArea = page.locator('.bg-blue-100.rounded-full');
-    await expect(logoArea).toBeVisible();
+    await expect(logoArea).toBeVisible({ timeout: 10000 });
     
     // Check form exists
     const form = page.locator('form');

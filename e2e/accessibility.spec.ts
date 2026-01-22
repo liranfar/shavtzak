@@ -5,24 +5,12 @@ const TEST_EMAIL = process.env.E2E_TEST_EMAIL || 'test@example.com';
 const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD || 'password123';
 
 /**
- * Fill credentials without exposing them in logs/traces
+ * Fill credentials using standard Playwright fill
+ * Note: Values may appear in traces, use test-only credentials
  */
 async function fillCredentials(page: Page, email: string, password: string) {
-  await page.evaluate(
-    ({ email, password }) => {
-      const emailInput = document.getElementById('email') as HTMLInputElement;
-      const passwordInput = document.getElementById('password') as HTMLInputElement;
-      if (emailInput) {
-        emailInput.value = email;
-        emailInput.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-      if (passwordInput) {
-        passwordInput.value = password;
-        passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-    },
-    { email, password }
-  );
+  await page.getByLabel('אימייל').fill(email);
+  await page.getByLabel('סיסמה').fill(password);
 }
 
 /**
