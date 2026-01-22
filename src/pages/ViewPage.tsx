@@ -353,21 +353,102 @@ export function ViewPage() {
   const handleDownloadPDF = () => {
     const dateDisplay = format(selectedDate, 'EEEE, d בMMMM yyyy', { locale: he });
 
-    // Build PDF content grouped by mission
-    const missionsWithShifts = missions
-      .map((mission) => {
-        const missionShifts = shiftsForDay
-          .filter((s) => s.missionId === mission.id)
-          .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
-        return { mission, shifts: missionShifts };
-      })
-      .filter((m) => m.shifts.length > 0);
+    // Helper function to format end time with date if needed
+    const formatEndTime = (startTime: Date, endTime: Date) => {
+      const startDay = startOfDay(startTime);
+      const endDay = startOfDay(endTime);
+      if (endDay.getTime() !== startDay.getTime()) {
+        return format(endTime, 'd/M HH:mm');
+      }
+      return format(endTime, 'HH:mm');
+    };
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       alert('נא לאפשר חלונות קופצים כדי להוריד PDF');
       return;
     }
+
+    // Build mission cards HTML matching the UI
+    const missionCardsHtml = shiftsByMissionAndTime.map(({ missionName, timeSlots, uncoveredToday, uncoveredTomorrow }) => {
+      // Today's uncovered ranges
+      const uncoveredTodayHtml = uncoveredToday.length > 0 ? `
+        <div class="warning-box warning-orange">
+          <div class="warning-header">⚠️ אין שיבוצים היום:</div>
+          <div class="warning-badges">
+            ${uncoveredToday.map(r => `<span class="badge badge-orange">${r.start}-${r.end}</span>`).join('')}
+          </div>
+        </div>
+      ` : '';
+
+      // Tomorrow's uncovered ranges  
+      const uncoveredTomorrowHtml = uncoveredTomorrow.length > 0 ? `
+        <div class="warning-box warning-purple">
+          <div class="warning-header">⚠️ אין שיבוצים למחר (לילה):</div>
+          <div class="warning-badges">
+            ${uncoveredTomorrow.map(r => `<span class="badge badge-purple">${r.start}-${r.end}</span>`).join('')}
+          </div>
+        </div>
+      ` : '';
+
+      // Time slots with shifts
+      const timeSlotsHtml = timeSlots.map(({ time, shifts: slotShifts }) => {
+        const shiftsHtml = slotShifts.map(shift => {
+          const soldier = getSoldier(shift.soldierId);
+          const platoon = soldier ? platoons.find(p => p.id === soldier.platoonId) : null;
+          const endTimeStr = formatEndTime(new Date(shift.startTime), new Date(shift.endTime));
+          
+          return `
+            <div class="shift-card" style="background-color: ${platoon?.color ? platoon.color + '15' : '#F8FAFC'}; border-color: ${platoon?.color ? platoon.color + '40' : '#E2E8F0'};">
+              <div class="color-dot" style="background-color: ${platoon?.color || '#64748B'}"></div>
+              <div class="shift-info">
+                <span class="soldier-name">${soldier?.name || 'לא ידוע'}</span>
+                <span class="platoon-name">(${platoon?.name || 'ללא מחלקה'})</span>
+              </div>
+              <span class="shift-time">עד ${endTimeStr}</span>
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="time-slot">
+            <div class="time-header">🕐 ${time}</div>
+            <div class="shifts-list">${shiftsHtml}</div>
+          </div>
+        `;
+      }).join('');
+
+      const shiftCount = timeSlots.reduce((sum, ts) => sum + ts.shifts.length, 0);
+
+      return `
+        <div class="mission-card">
+          <div class="mission-header">
+            <span class="mission-name">${missionName}</span>
+            <span class="shift-count">(${shiftCount} משמרות)</span>
+          </div>
+          ${uncoveredTodayHtml}
+          <div class="time-slots">${timeSlotsHtml}</div>
+          ${uncoveredTomorrowHtml}
+        </div>
+      `;
+    }).join('');
+
+    // Unavailable soldiers section
+    const unavailableHtml = unavailableByReason.length > 0 ? `
+      <div class="section unavailable-section">
+        <h3 class="section-title">👥 חיילים לא זמינים (${unavailableByReason.reduce((sum, g) => sum + g.soldiers.length, 0)})</h3>
+        <div class="unavailable-grid">
+          ${unavailableByReason.map(group => `
+            <div class="unavailable-group">
+              <div class="group-header">${group.reason} (${group.soldiers.length})</div>
+              <div class="soldiers-list">
+                ${group.soldiers.map(s => `<span class="soldier-badge">${s.name}</span>`).join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : '';
 
     const html = `
       <!DOCTYPE html>
@@ -378,49 +459,98 @@ export function ViewPage() {
         <style>
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            padding: 24px;
             direction: rtl;
-            font-size: 12px;
+            font-size: 11px;
+            background: #f8fafc;
+            color: #1e293b;
           }
-          h1 {
+          .header {
             text-align: center;
-            margin-bottom: 8px;
-            font-size: 18px;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #e2e8f0;
           }
-          .date {
-            text-align: center;
-            color: #666;
-            margin-bottom: 20px;
+          .header h1 {
+            font-size: 22px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 4px;
+          }
+          .header .date {
             font-size: 14px;
+            color: #64748b;
+          }
+          .header .stats {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #3b82f6;
+            font-weight: 500;
           }
           .missions-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
+            gap: 16px;
+            margin-bottom: 24px;
           }
-          .mission {
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 10px;
+          .mission-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 12px;
             break-inside: avoid;
           }
-          .mission-name {
-            font-weight: bold;
+          .mission-header {
+            font-weight: 600;
             font-size: 13px;
-            margin-bottom: 8px;
-            padding-bottom: 6px;
-            border-bottom: 1px solid #eee;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e2e8f0;
           }
-          .shift {
+          .mission-name { color: #0f172a; }
+          .shift-count { color: #64748b; font-weight: 400; margin-right: 6px; font-size: 11px; }
+          
+          .warning-box {
+            padding: 8px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+          }
+          .warning-orange { background: #fff7ed; border: 1px solid #fed7aa; }
+          .warning-purple { background: #faf5ff; border: 1px solid #e9d5ff; margin-top: 10px; }
+          .warning-header { font-size: 10px; font-weight: 600; margin-bottom: 4px; }
+          .warning-orange .warning-header { color: #c2410c; }
+          .warning-purple .warning-header { color: #7c3aed; }
+          .warning-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+          .badge {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 500;
+          }
+          .badge-orange { background: #ffedd5; color: #9a3412; }
+          .badge-purple { background: #f3e8ff; color: #6b21a8; }
+          
+          .time-slots { }
+          .time-slot {
+            margin-bottom: 10px;
+            padding-right: 8px;
+            border-right: 2px solid #3b82f6;
+          }
+          .time-header {
+            font-size: 11px;
+            font-weight: 600;
+            color: #1d4ed8;
+            margin-bottom: 6px;
+          }
+          .shifts-list { display: flex; flex-direction: column; gap: 4px; }
+          .shift-card {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 6px 0;
-            border-bottom: 1px solid #f5f5f5;
-          }
-          .shift:last-child {
-            border-bottom: none;
+            gap: 6px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            border: 1px solid;
           }
           .color-dot {
             width: 8px;
@@ -428,73 +558,84 @@ export function ViewPage() {
             border-radius: 50%;
             flex-shrink: 0;
           }
-          .shift-info {
-            flex: 1;
+          .shift-info { flex: 1; }
+          .soldier-name { font-weight: 500; }
+          .platoon-name { color: #64748b; margin-right: 4px; }
+          .shift-time { color: #94a3b8; font-size: 10px; }
+          
+          .section {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
           }
-          .soldier-name {
-            font-weight: 500;
+          .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 12px;
           }
-          .platoon-name {
-            color: #666;
-            font-size: 11px;
+          .unavailable-section { border-color: #fecaca; background: #fef2f2; }
+          .unavailable-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+          .unavailable-group { }
+          .group-header { font-size: 11px; font-weight: 600; color: #991b1b; margin-bottom: 4px; }
+          .soldiers-list { display: flex; flex-wrap: wrap; gap: 4px; }
+          .soldier-badge { 
+            padding: 2px 8px; 
+            background: #fee2e2; 
+            color: #b91c1c; 
+            border-radius: 4px; 
+            font-size: 10px; 
           }
-          .shift-time {
-            color: #888;
-            font-size: 11px;
-          }
+          
           .footer {
-            margin-top: 20px;
             text-align: center;
-            color: #999;
+            color: #94a3b8;
             font-size: 10px;
+            padding-top: 16px;
+            border-top: 1px solid #e2e8f0;
           }
+          
           @media print {
-            body { padding: 10px; }
-            .no-print { display: none; }
+            body { 
+              padding: 12px; 
+              background: white;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .missions-grid { grid-template-columns: repeat(3, 1fr); }
+            .mission-card { break-inside: avoid; }
+          }
+          
+          @page {
+            size: A4 landscape;
+            margin: 10mm;
           }
         </style>
       </head>
       <body>
-        <h1>סידור משמרות</h1>
-        <div class="date">${dateDisplay}</div>
-
-        <div class="missions-grid">
-          ${missionsWithShifts
-            .map(
-              ({ mission, shifts: mShifts }) => `
-            <div class="mission">
-              <div class="mission-name">${mission.name}</div>
-              ${mShifts
-                .map((shift) => {
-                  const soldier = getSoldier(shift.soldierId);
-                  const platoon = soldier ? platoons.find((p) => p.id === soldier.platoonId) : null;
-                  return `
-                  <div class="shift">
-                    <div class="color-dot" style="background-color: ${platoon?.color || '#64748B'}"></div>
-                    <div class="shift-info">
-                      <div class="soldier-name">${soldier?.name || 'לא ידוע'}</div>
-                      <div class="platoon-name">${platoon?.name || 'ללא מחלקה'}</div>
-                    </div>
-                    <div class="shift-time">${format(new Date(shift.startTime), 'HH:mm')} - ${format(new Date(shift.endTime), 'HH:mm')}</div>
-                  </div>
-                `;
-                })
-                .join('')}
-            </div>
-          `
-            )
-            .join('')}
+        <div class="header">
+          <h1>📋 סידור משמרות</h1>
+          <div class="date">${dateDisplay}</div>
+          <div class="stats">${shiftsForDay.length} משמרות | ${missions.length} משימות</div>
         </div>
 
-        ${missionsWithShifts.length === 0 ? '<p style="text-align: center; color: #666; padding: 40px;">אין משמרות ליום זה</p>' : ''}
+        <div class="missions-grid">
+          ${missionCardsHtml}
+        </div>
+
+        ${shiftsByMissionAndTime.length === 0 ? '<p style="text-align: center; color: #64748b; padding: 40px;">אין משמרות ליום זה</p>' : ''}
+
+        ${unavailableHtml}
 
         <div class="footer">
-          נוצר ב-${format(new Date(), 'dd/MM/yyyy HH:mm')}
+          נוצר ב-${format(new Date(), 'dd/MM/yyyy HH:mm')} | שבצ"ק - מערכת ניהול משמרות
         </div>
 
         <script>
           window.onload = function() {
-            window.print();
+            setTimeout(() => window.print(), 500);
           }
         </script>
       </body>
