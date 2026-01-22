@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
-import { ChevronRight, ChevronLeft, Eye, Download, UserX, Calendar, List, Clock } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Eye, Download, UserX, Calendar, List, Clock, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
-import { format, addDays, subDays, startOfDay } from 'date-fns';
+import { format, addDays, addHours, subDays, startOfDay } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { useMissionStore } from '../stores/missionStore';
 import { useScheduleStore } from '../stores/scheduleStore';
@@ -101,7 +101,11 @@ export function ViewPage() {
   }, [shiftsForDay, missions, soldiers]);
 
   // Group shifts by mission AND time slot (Mission → TimeSlot → Soldiers)
+  // Also calculate uncovered time ranges for each mission
   const shiftsByMissionAndTime = useMemo(() => {
+    const dayStart = startOfDay(selectedDate);
+    const dayEnd = addDays(dayStart, 1);
+    
     const grouped = new Map<string, Map<string, typeof shiftsForDay>>();
 
     for (const shift of shiftsForDay) {
@@ -127,17 +131,163 @@ export function ViewPage() {
       }
     }
 
-    // Convert to sorted array (missions sorted by name, time slots sorted chronologically)
-    return Array.from(grouped.entries())
-      .sort((a, b) => getMissionName(a[0]).localeCompare(getMissionName(b[0])))
-      .map(([missionId, timeMap]) => ({
-        missionId,
-        missionName: getMissionName(missionId),
-        timeSlots: Array.from(timeMap.entries())
-          .sort((a, b) => a[0].localeCompare(b[0]))
-          .map(([time, shifts]) => ({ time, shifts }))
-      }));
-  }, [shiftsForDay, missions, soldiers]);
+    // Calculate uncovered ranges for each mission (today + overnight into tomorrow)
+    const calculateUncoveredRanges = (missionId: string): { 
+      today: Array<{ start: string; end: string }>;
+      tomorrow: Array<{ start: string; end: string }>;
+    } => {
+      const missionShiftsRaw = shiftsForDay.filter(s => s.missionId === missionId);
+      
+      // === TODAY'S GAPS (00:00-24:00) ===
+      const todayShifts = missionShiftsRaw
+        .map(s => {
+          const start = new Date(s.startTime);
+          const end = new Date(s.endTime);
+          return {
+            start: start < dayStart ? dayStart : (start > dayEnd ? dayEnd : start),
+            end: end > dayEnd ? dayEnd : (end < dayStart ? dayStart : end),
+          };
+        })
+        .filter(s => s.start < s.end)
+        .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+      const todayGaps: Array<{ start: string; end: string }> = [];
+      
+      if (todayShifts.length === 0) {
+        todayGaps.push({ start: '00:00', end: '24:00' });
+      } else {
+        // Merge overlapping shifts
+        const mergedToday: Array<{ start: Date; end: Date }> = [];
+        for (const shift of todayShifts) {
+          if (mergedToday.length === 0) {
+            mergedToday.push({ start: shift.start, end: shift.end });
+          } else {
+            const last = mergedToday[mergedToday.length - 1];
+            if (shift.start <= last.end) {
+              last.end = shift.end > last.end ? shift.end : last.end;
+            } else {
+              mergedToday.push({ start: shift.start, end: shift.end });
+            }
+          }
+        }
+
+        // Find gaps
+        let currentTime = dayStart;
+        for (const coverage of mergedToday) {
+          if (coverage.start > currentTime) {
+            todayGaps.push({
+              start: format(currentTime, 'HH:mm'),
+              end: format(coverage.start, 'HH:mm'),
+            });
+          }
+          currentTime = coverage.end;
+        }
+        if (currentTime < dayEnd) {
+          todayGaps.push({
+            start: format(currentTime, 'HH:mm'),
+            end: '24:00',
+          });
+        }
+      }
+
+      // === TOMORROW'S OVERNIGHT GAPS (from today's night shifts) ===
+      const nextDayStart = dayEnd; // 00:00 tomorrow
+      const expectedOvernightEnd = addHours(nextDayStart, 8); // Expect coverage until 08:00 tomorrow
+      
+      // Find overnight shifts (shifts ending after midnight)
+      const overnightShifts = missionShiftsRaw
+        .map(s => ({ start: new Date(s.startTime), end: new Date(s.endTime) }))
+        .filter(s => s.end > nextDayStart); // Shifts that extend into tomorrow
+      
+      const tomorrowGaps: Array<{ start: string; end: string }> = [];
+      
+      // Check if any shifts from today extend into tomorrow
+      const hasOvernightShifts = overnightShifts.length > 0;
+      
+      // Also check if today has late-night shifts (starting after 18:00)
+      const hasLateNightShifts = missionShiftsRaw.some(s => {
+        const startHour = new Date(s.startTime).getHours();
+        return startHour >= 18;
+      });
+      
+      // Only show tomorrow gaps if there are overnight or late-night shifts
+      if (hasOvernightShifts || hasLateNightShifts) {
+        // Use either the max overnight end or expected end (08:00), whichever is later
+        const maxOvernightEnd = overnightShifts.length > 0
+          ? new Date(Math.max(...overnightShifts.map(s => s.end.getTime())))
+          : nextDayStart;
+        const overnightWindowEnd = maxOvernightEnd > expectedOvernightEnd ? maxOvernightEnd : expectedOvernightEnd;
+        
+        // Clamp overnight shifts to tomorrow's portion only
+        const tomorrowShifts = overnightShifts
+          .map(s => ({
+            start: s.start < nextDayStart ? nextDayStart : s.start,
+            end: s.end,
+          }))
+          .filter(s => s.start < s.end)
+          .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+        // Merge overlapping
+        const mergedTomorrow: Array<{ start: Date; end: Date }> = [];
+        for (const shift of tomorrowShifts) {
+          if (mergedTomorrow.length === 0) {
+            mergedTomorrow.push({ start: shift.start, end: shift.end });
+          } else {
+            const last = mergedTomorrow[mergedTomorrow.length - 1];
+            if (shift.start <= last.end) {
+              last.end = shift.end > last.end ? shift.end : last.end;
+            } else {
+              mergedTomorrow.push({ start: shift.start, end: shift.end });
+            }
+          }
+        }
+
+        // Find gaps in tomorrow's coverage (from 00:00 to overnight window end)
+        let currTime = nextDayStart;
+        for (const coverage of mergedTomorrow) {
+          if (coverage.start > currTime) {
+            tomorrowGaps.push({
+              start: format(currTime, 'HH:mm'),
+              end: format(coverage.start, 'HH:mm'),
+            });
+          }
+          currTime = coverage.end;
+        }
+        // Gap from last coverage to expected overnight end
+        if (currTime < overnightWindowEnd) {
+          tomorrowGaps.push({
+            start: format(currTime, 'HH:mm'),
+            end: format(overnightWindowEnd, 'HH:mm'),
+          });
+        }
+      }
+
+      return { today: todayGaps, tomorrow: tomorrowGaps };
+    };
+
+    // Build result including ALL missions (even those with no shifts)
+    const result = missions.map(mission => {
+      const timeMap = grouped.get(mission.id);
+      const timeSlots = timeMap 
+        ? Array.from(timeMap.entries())
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([time, shifts]) => ({ time, shifts }))
+        : [];
+      
+      const { today, tomorrow } = calculateUncoveredRanges(mission.id);
+      
+      return {
+        missionId: mission.id,
+        missionName: mission.name,
+        timeSlots,
+        uncoveredToday: today,
+        uncoveredTomorrow: tomorrow,
+      };
+    });
+
+    // Sort by mission name
+    return result.sort((a, b) => a.missionName.localeCompare(b.missionName, 'he'));
+  }, [shiftsForDay, missions, soldiers, selectedDate]);
 
   // Get soldiers who are unavailable (status is not available) or on leave
   const unavailableSoldiers = useMemo(() => {
@@ -458,7 +608,7 @@ export function ViewPage() {
             שיבוצים ליום זה ({shiftsForDay.length} משמרות)
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {shiftsByMissionAndTime.map(({ missionId, missionName, timeSlots }) => (
+            {shiftsByMissionAndTime.map(({ missionId, missionName, timeSlots, uncoveredToday, uncoveredTomorrow }) => (
               <div key={missionId} className="p-3 bg-slate-50 rounded-lg">
                 <h4 className="font-semibold text-slate-900 text-sm mb-3 pb-2 border-b border-slate-200">
                   {missionName}
@@ -466,6 +616,27 @@ export function ViewPage() {
                     ({timeSlots.reduce((sum, ts) => sum + ts.shifts.length, 0)} משמרות)
                   </span>
                 </h4>
+                
+                {/* Today's uncovered time ranges warning */}
+                {uncoveredToday.length > 0 && (
+                  <div className="mb-2 p-2 bg-orange-50 border border-orange-200 rounded-lg">
+                    <div className="flex items-center gap-1 text-orange-700 text-xs font-medium mb-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      <span>אין שיבוצים היום:</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {uncoveredToday.map((range, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 bg-orange-100 text-orange-800 rounded text-xs font-medium"
+                        >
+                          {range.start}-{range.end}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-3">
                   {timeSlots.map(({ time, shifts: slotShifts }) => (
                     <div key={time} className="border-r-2 border-blue-400 pr-2">
@@ -495,7 +666,16 @@ export function ViewPage() {
                                 <span className="text-slate-500 mr-1">({platoonName})</span>
                               </div>
                               <span className="text-slate-400 text-[10px]">
-                                עד {format(new Date(shift.endTime), 'HH:mm')}
+                                עד {(() => {
+                                  const startDate = startOfDay(new Date(shift.startTime));
+                                  const endDate = new Date(shift.endTime);
+                                  const endDay = startOfDay(endDate);
+                                  // Show date if end time is on a different day than start
+                                  if (endDay.getTime() !== startDate.getTime()) {
+                                    return format(endDate, 'd/M HH:mm');
+                                  }
+                                  return format(endDate, 'HH:mm');
+                                })()}
                               </span>
                             </div>
                           );
@@ -504,6 +684,26 @@ export function ViewPage() {
                     </div>
                   ))}
                 </div>
+
+                {/* Tomorrow's overnight uncovered time ranges warning - shown below shifts */}
+                {uncoveredTomorrow.length > 0 && (
+                  <div className="mt-3 p-2 bg-purple-50 border border-purple-200 rounded-lg">
+                    <div className="flex items-center gap-1 text-purple-700 text-xs font-medium mb-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      <span>אין שיבוצים למחר (לילה):</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {uncoveredTomorrow.map((range, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 bg-purple-100 text-purple-800 rounded text-xs font-medium"
+                        >
+                          {range.start}-{range.end}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
