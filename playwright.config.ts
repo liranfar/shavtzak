@@ -1,4 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
+import { config } from 'dotenv';
+
+// Load environment variables from .env file for local development
+config();
 
 /**
  * Playwright configuration for Shavtzak e2e tests
@@ -7,7 +11,7 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   /* Run tests in files in parallel */
-  fullyParallel: true,
+  fullyParallel: false,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
@@ -19,7 +23,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: process.env.BASE_URL || 'http://localhost:4173',
+    baseURL: process.env.BASE_URL || 'http://localhost:5173',
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
     /* Take screenshot on failure */
@@ -38,7 +42,7 @@ export default defineConfig({
   webServer: process.env.CI
     ? {
         command: 'npm run preview',
-        url: 'http://localhost:4173',
+        url: 'http://localhost:5173',
         reuseExistingServer: !process.env.CI,
         timeout: 120 * 1000,
       }
