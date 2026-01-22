@@ -1,8 +1,29 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 
-// Test credentials from environment variables
+// Test credentials from environment variables (masked in logs)
 const TEST_EMAIL = process.env.E2E_TEST_EMAIL || 'test@example.com';
 const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD || 'password123';
+
+/**
+ * Fill credentials without exposing them in logs/traces
+ */
+async function fillCredentials(page: Page, email: string, password: string) {
+  await page.evaluate(
+    ({ email, password }) => {
+      const emailInput = document.getElementById('email') as HTMLInputElement;
+      const passwordInput = document.getElementById('password') as HTMLInputElement;
+      if (emailInput) {
+        emailInput.value = email;
+        emailInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (passwordInput) {
+        passwordInput.value = password;
+        passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    },
+    { email, password }
+  );
+}
 
 /**
  * Accessibility tests for Shavtzak
@@ -27,9 +48,8 @@ test.describe('Accessibility', () => {
   test('login button should be keyboard accessible', async ({ page }) => {
     await page.goto('/');
 
-    // Fill in the form
-    await page.getByLabel('אימייל').fill(TEST_EMAIL);
-    await page.getByLabel('סיסמה').fill(TEST_PASSWORD);
+    // Fill in the form (masked - not shown in logs)
+    await fillCredentials(page, TEST_EMAIL, TEST_PASSWORD);
 
     // Tab to the button and check it's focused
     await page.keyboard.press('Tab');
