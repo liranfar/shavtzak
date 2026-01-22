@@ -43,7 +43,9 @@ interface ShiftAssignmentModalProps {
   allShifts: Shift[]; // All shifts for history lookup
   missions: Mission[]; // All missions for name lookup
   currentSlotShifts?: Shift[]; // Shifts already assigned at this slot
-  onAssign: (soldierIds: string[], startTime: Date, endTime: Date) => void;
+  onAssign: (soldierIds: string[], startTime: Date, endTime: Date) => void | Promise<void>;
+  onRemove?: (shiftId: string) => void | Promise<void>; // Remove shift by ID
+  onTrimShift?: (shiftId: string, newEndTime: Date) => void | Promise<void>; // Trim shift end time
   onClose: () => void;
 }
 
@@ -59,6 +61,8 @@ export function ShiftAssignmentModal({
   missions,
   currentSlotShifts = [],
   onAssign,
+  onRemove,
+  onTrimShift,
   onClose,
 }: ShiftAssignmentModalProps) {
   // Pre-select soldiers from existing shifts at this slot
@@ -79,9 +83,21 @@ export function ShiftAssignmentModal({
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedSoldierIds, setExpandedSoldierIds] = useState<Set<string>>(new Set());
   const [expandAll, setExpandAll] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [useDurationMode, setUseDurationMode] = useState(false); // Default to end time mode
+  const [endTimeInput, setEndTimeInput] = useState(() => {
+    // Default end time: start time + 2 hours, or from existing shift
+    if (currentSlotShifts.length > 0) {
+      return format(new Date(currentSlotShifts[0].endTime), "yyyy-MM-dd'T'HH:mm");
+    }
+    return format(addMinutes(initialStartTime, 120), "yyyy-MM-dd'T'HH:mm");
+  });
 
+  // Always use the clicked slot time as start - this allows adding soldiers mid-shift
   const startTime = initialStartTime;
-  const endTime = addMinutes(startTime, durationMinutes);
+  const endTime = useDurationMode
+    ? addMinutes(startTime, durationMinutes)
+    : new Date(endTimeInput);
 
   // Calculate recent shifts per soldier (last 7 days)
   const recentShiftsBySoldier = useMemo(() => {
@@ -148,16 +164,20 @@ export function ShiftAssignmentModal({
   };
 
   // Get suggested soldiers sorted by availability (show all platoons)
+  // Exclude current slot shifts from conflict detection so already-assigned soldiers can be toggled
   const suggestions = useMemo(() => {
+    const currentSlotShiftIds = new Set(currentSlotShifts.map(s => s.id));
+    const shiftsExcludingCurrentSlot = existingShifts.filter(s => !currentSlotShiftIds.has(s.id));
+    
     return suggestSoldiersForShift(
       soldiers,
       null, // Show all platoons, not just mission's platoon
-      existingShifts,
+      shiftsExcludingCurrentSlot,
       startTime,
       endTime,
       9999 // Show all soldiers
     );
-  }, [soldiers, existingShifts, startTime, endTime]);
+  }, [soldiers, existingShifts, currentSlotShifts, startTime, endTime]);
 
   // Filter suggestions by search term
   const filteredSuggestions = useMemo(() => {
@@ -190,8 +210,11 @@ export function ShiftAssignmentModal({
   }, [filteredSuggestions, platoons]);
 
   // Get validation results for selected soldiers
+  // Exclude current slot shifts so already-assigned soldiers don't show as invalid
   const validationResults = useMemo(() => {
     const results = new Map<string, { isValid: boolean; hasWarning: boolean }>();
+    const currentSlotShiftIds = new Set(currentSlotShifts.map(s => s.id));
+    const shiftsExcludingCurrentSlot = existingShifts.filter(s => !currentSlotShiftIds.has(s.id));
 
     for (const soldierId of selectedSoldierIds) {
       const soldier = soldiers.find((s) => s.id === soldierId);
@@ -201,7 +224,7 @@ export function ShiftAssignmentModal({
         soldierId,
         startTime,
         endTime,
-        existingShifts,
+        shiftsExcludingCurrentSlot,
         soldier
       );
 
@@ -212,7 +235,7 @@ export function ShiftAssignmentModal({
     }
 
     return results;
-  }, [selectedSoldierIds, startTime, endTime, existingShifts, soldiers]);
+  }, [selectedSoldierIds, startTime, endTime, existingShifts, currentSlotShifts, soldiers]);
 
   const toggleSoldier = (soldierId: string, hasConflict: boolean) => {
     if (hasConflict) return;
@@ -226,14 +249,57 @@ export function ShiftAssignmentModal({
     setSelectedSoldierIds(newSelected);
   };
 
-  const handleAssign = () => {
-    const validSoldierIds = Array.from(selectedSoldierIds).filter(id => {
+  const handleAssign = async () => {
+    // Get soldiers who already have shifts at this slot
+    const existingSoldierIds = new Set(currentSlotShifts.map(s => s.soldierId));
+
+    // Only create shifts for newly selected soldiers (not those already assigned)
+    const newSoldierIds = Array.from(selectedSoldierIds).filter(id => {
       const result = validationResults.get(id);
-      return result?.isValid !== false;
+      const isValid = result?.isValid !== false;
+      const isNew = !existingSoldierIds.has(id);
+      return isValid && isNew;
     });
 
-    if (validSoldierIds.length > 0) {
-      onAssign(validSoldierIds, startTime, endTime);
+    // Find shifts to modify (previously assigned but now unchecked)
+    const shiftsToModify = currentSlotShifts.filter(
+      shift => !selectedSoldierIds.has(shift.soldierId)
+    );
+
+    const hasChanges = newSoldierIds.length > 0 || shiftsToModify.length > 0;
+
+    if (hasChanges) {
+      setIsSubmitting(true);
+      try {
+        // Handle unchecked soldiers' shifts - trim or delete based on clicked time
+        for (const shift of shiftsToModify) {
+          const shiftStart = new Date(shift.startTime);
+          
+          // If clicked at the start of the shift, delete the entire shift
+          // If clicked in the middle, trim the shift to end at the clicked time
+          if (shiftStart.getTime() === startTime.getTime()) {
+            // Delete the entire shift
+            if (onRemove) {
+              await onRemove(shift.id);
+            }
+          } else if (shiftStart < startTime) {
+            // Trim the shift to end at the clicked time
+            if (onTrimShift) {
+              await onTrimShift(shift.id, startTime);
+            }
+          }
+        }
+        // Add new soldiers
+        if (newSoldierIds.length > 0) {
+          await onAssign(newSoldierIds, startTime, endTime);
+        }
+      } finally {
+        setIsSubmitting(false);
+      }
+      onClose();
+    } else {
+      // If no changes, just close the modal
+      onClose();
     }
   };
 
@@ -378,20 +444,62 @@ export function ShiftAssignmentModal({
             </span>
           </div>
 
-          {/* Duration selector */}
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-medium text-slate-700">משך:</label>
-            <select
-              value={durationMinutes}
-              onChange={(e) => setDurationMinutes(Number(e.target.value))}
-              className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {DURATION_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+          {/* Duration/End time selector with toggle */}
+          <div className="space-y-2">
+            {/* Toggle between modes */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setUseDurationMode(false)}
+                className={clsx(
+                  'px-3 py-1 text-xs font-medium rounded-lg transition-colors',
+                  !useDurationMode
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                )}
+              >
+                שעת סיום
+              </button>
+              <button
+                onClick={() => setUseDurationMode(true)}
+                className={clsx(
+                  'px-3 py-1 text-xs font-medium rounded-lg transition-colors',
+                  useDurationMode
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                )}
+              >
+                משך זמן
+              </button>
+            </div>
+
+            {/* Input based on mode */}
+            {useDurationMode ? (
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium text-slate-700">משך:</label>
+                <select
+                  value={durationMinutes}
+                  onChange={(e) => setDurationMinutes(Number(e.target.value))}
+                  className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {DURATION_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium text-slate-700">סיום:</label>
+                <input
+                  type="datetime-local"
+                  value={endTimeInput}
+                  onChange={(e) => setEndTimeInput(e.target.value)}
+                  min={format(addMinutes(startTime, 30), "yyyy-MM-dd'T'HH:mm")}
+                  className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
           </div>
 
           {/* Spots info */}
@@ -699,15 +807,15 @@ export function ShiftAssignmentModal({
         <div className="flex gap-3 px-6 py-4 border-t border-slate-200">
           <button
             onClick={handleAssign}
-            disabled={!canAssign}
+            disabled={!canAssign || isSubmitting}
             className={clsx(
               'flex-1 px-4 py-2 rounded-lg font-medium transition-colors',
-              canAssign
+              canAssign && !isSubmitting
                 ? 'bg-blue-600 text-white hover:bg-blue-700'
                 : 'bg-slate-100 text-slate-400 cursor-not-allowed'
             )}
           >
-            שבץ {selectedSoldierIds.size > 0 ? `(${selectedSoldierIds.size})` : ''}
+            {isSubmitting ? 'משבץ...' : `שבץ ${selectedSoldierIds.size > 0 ? `(${selectedSoldierIds.size})` : ''}`}
           </button>
           <button
             onClick={onClose}

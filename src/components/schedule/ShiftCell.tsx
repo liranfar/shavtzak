@@ -1,5 +1,5 @@
 import { useDraggable } from '@dnd-kit/core';
-import { AlertTriangle, AlertCircle, X } from 'lucide-react';
+import { AlertTriangle, AlertCircle } from 'lucide-react';
 import type { Shift, ValidationAlert } from '../../types/entities';
 import { getHighestAlertType } from '../../services/validationService';
 import { format } from 'date-fns';
@@ -12,7 +12,6 @@ interface ShiftCellProps {
   missionId: string;
   hour: number;
   minute?: number;
-  onRemove?: (shiftId: string) => void;
   platoonColor?: string;
   certificates?: string[]; // Certificate names (already resolved)
 }
@@ -29,7 +28,6 @@ export function ShiftCell({
   missionId,
   hour,
   minute = 0,
-  onRemove,
   platoonColor,
   certificates = [],
 }: ShiftCellProps) {
@@ -80,17 +78,6 @@ export function ShiftCell({
               </span>
             ))}
           </div>
-        )}
-        {onRemove && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove(shift.id);
-            }}
-            className="absolute -top-1 -left-1 p-0.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-          >
-            <X className="w-3 h-3" />
-          </button>
         )}
       </div>
     );

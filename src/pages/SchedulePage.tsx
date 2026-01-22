@@ -25,16 +25,12 @@ import { PageLoader } from '../components/ui/LoadingSpinner';
 import type { Mission, Shift } from '../types/entities';
 import clsx from 'clsx';
 
-// Generate 30-minute time slots for precise scheduling
-const TIME_SLOTS: { hour: number; minute: number; label: string }[] = [];
-for (let h = 0; h < 24; h++) {
-  TIME_SLOTS.push({ hour: h, minute: 0, label: `${String(h).padStart(2, '0')}:00` });
-  TIME_SLOTS.push({ hour: h, minute: 30, label: `${String(h).padStart(2, '0')}:30` });
-}
+// Hours in a day for generating slots
+const HOURS_IN_DAY = 24;
 
 export function SchedulePage() {
   const { missions, loadMissions, isLoading: missionsLoading } = useMissionStore();
-  const { shifts, selectedDate, setSelectedDate, loadShifts, addShift, deleteShift, isLoading: shiftsLoading } = useScheduleStore();
+  const { shifts, selectedDate, setSelectedDate, loadShifts, addShift, updateShift, deleteShift, isLoading: shiftsLoading } = useScheduleStore();
   const { soldiers, loadSoldiers, isLoading: soldiersLoading } = useSoldierStore();
   const { platoons, loadPlatoons, loadSquads, certificates, loadCertificates, statuses, loadStatuses, isLoading: platoonsLoading } = usePlatoonStore();
 
@@ -138,16 +134,37 @@ export function SchedulePage() {
   const handleNextDay = () => setSelectedDate(addDays(selectedDate, 1));
   const handleToday = () => setSelectedDate(new Date());
 
-  // Get shifts that START at this exact time slot (hour:minute)
-  const getShiftsStartingAtSlot = (missionId: string, hour: number, minute: number) => {
+  // Generate time slots for 3 days: previous, current, next
+  const timeSlots = useMemo(() => {
+    const slots: { date: Date; hour: number; minute: number; label: string; dayLabel: string; isFirstOfDay: boolean }[] = [];
+    const prevDay = subDays(selectedDate, 1);
+    const nextDay = addDays(selectedDate, 1);
+    const days = [prevDay, selectedDate, nextDay];
+
+    for (const day of days) {
+      for (let h = 0; h < HOURS_IN_DAY; h++) {
+        slots.push({
+          date: day,
+          hour: h,
+          minute: 0,
+          label: `${String(h).padStart(2, '0')}:00`,
+          dayLabel: format(day, 'EEE d/M', { locale: he }),
+          isFirstOfDay: h === 0,
+        });
+      }
+    }
+    return slots;
+  }, [selectedDate]);
+
+  // Get shifts that START at this exact time slot (hour:minute) on a specific date
+  const getShiftsStartingAtSlot = (missionId: string, date: Date, hour: number, minute: number) => {
     return shifts.filter((s) => {
       const shiftStart = new Date(s.startTime);
-      const shiftDate = new Date(selectedDate);
       return (
         s.missionId === missionId &&
-        shiftStart.getDate() === shiftDate.getDate() &&
-        shiftStart.getMonth() === shiftDate.getMonth() &&
-        shiftStart.getFullYear() === shiftDate.getFullYear() &&
+        shiftStart.getDate() === date.getDate() &&
+        shiftStart.getMonth() === date.getMonth() &&
+        shiftStart.getFullYear() === date.getFullYear() &&
         shiftStart.getHours() === hour &&
         shiftStart.getMinutes() === minute
       );
@@ -155,9 +172,8 @@ export function SchedulePage() {
   };
 
   // Get all shifts that COVER this time slot (for showing continuation)
-  // This includes overnight shifts that started on the previous day
-  const getShiftsCoveringSlot = (missionId: string, hour: number, minute: number) => {
-    const slotTime = setMinutes(setHours(startOfDay(selectedDate), hour), minute);
+  const getShiftsCoveringSlot = (missionId: string, date: Date, hour: number, minute: number) => {
+    const slotTime = setMinutes(setHours(startOfDay(date), hour), minute);
     return shifts.filter((s) => {
       const shiftStart = new Date(s.startTime);
       const shiftEnd = new Date(s.endTime);
@@ -171,8 +187,8 @@ export function SchedulePage() {
 
   // Get overnight shifts that started on a previous day but continue into this day
   // These should display their card at 00:00
-  const getOvernightShifts = (missionId: string) => {
-    const dayStart = startOfDay(selectedDate);
+  const getOvernightShifts = (missionId: string, date: Date) => {
+    const dayStart = startOfDay(date);
     return shifts.filter((s) => {
       const shiftStart = new Date(s.startTime);
       const shiftEnd = new Date(s.endTime);
@@ -208,8 +224,8 @@ export function SchedulePage() {
     return platoon?.color;
   };
 
-  const handleCellClick = (mission: Mission, hour: number, minute: number) => {
-    const startTime = setMinutes(setHours(startOfDay(selectedDate), hour), minute);
+  const handleCellClick = (mission: Mission, date: Date, hour: number, minute: number) => {
+    const startTime = setMinutes(setHours(startOfDay(date), hour), minute);
     // Get shifts that cover this slot for this mission
     const currentSlotShifts = shifts.filter((s) => {
       const shiftStart = new Date(s.startTime);
@@ -235,12 +251,15 @@ export function SchedulePage() {
         status: 'scheduled',
       });
     }
-
-    setModalData(null);
+    // Note: modal will call onClose after all operations
   };
 
   const handleRemoveShift = async (shiftId: string) => {
     await deleteShift(shiftId);
+  };
+
+  const handleTrimShift = async (shiftId: string, newEndTime: Date) => {
+    await updateShift(shiftId, { endTime: newEndTime });
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -332,14 +351,39 @@ export function SchedulePage() {
             <div className="max-h-[calc(100vh-380px)] overflow-auto">
               <table className="w-full">
                 <thead>
+                  {/* Day labels row */}
+                  <tr className="bg-slate-100 border-b border-slate-300">
+                    <th className="sticky right-0 z-10 bg-slate-100 px-3 py-1 text-right text-xs font-semibold text-slate-500 border-l border-slate-300 min-w-[120px]">
+                      תאריך
+                    </th>
+                    {timeSlots.map((slot, idx) => (
+                      <th
+                        key={`day-${idx}`}
+                        className={clsx(
+                          'px-1 py-1 text-center text-[10px] font-semibold border-l border-l-slate-200 min-w-[70px]',
+                          slot.isFirstOfDay && 'border-r-2 border-r-slate-400',
+                          slot.date.getTime() === startOfDay(selectedDate).getTime()
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'text-slate-500'
+                        )}
+                      >
+                        {slot.isFirstOfDay && slot.dayLabel}
+                      </th>
+                    ))}
+                  </tr>
+                  {/* Time slots row */}
                   <tr className="bg-slate-50">
                     <th className="sticky right-0 z-10 bg-slate-50 px-3 py-2 text-right text-sm font-semibold text-slate-900 border-l border-slate-200 min-w-[120px]">
                       {labels.missions}
                     </th>
-                    {TIME_SLOTS.map((slot) => (
+                    {timeSlots.map((slot, idx) => (
                       <th
-                        key={slot.label}
-                        className="px-1 py-2 text-center text-xs font-medium text-slate-600 border-l border-slate-200 min-w-[70px]"
+                        key={`time-${idx}`}
+                        className={clsx(
+                          'px-1 py-2 text-center text-xs font-medium text-slate-600 border-l border-l-slate-200 min-w-[70px]',
+                          slot.isFirstOfDay && 'border-r-2 border-r-slate-400',
+                          slot.date.getTime() === startOfDay(selectedDate).getTime() && 'bg-blue-50'
+                        )}
                       >
                         {slot.label}
                       </th>
@@ -358,25 +402,32 @@ export function SchedulePage() {
                             </p>
                           </div>
                         </td>
-                        {TIME_SLOTS.map((slot) => {
-                          const shiftsStartingHere = getShiftsStartingAtSlot(mission.id, slot.hour, slot.minute);
+                        {timeSlots.map((slot, idx) => {
+                          const shiftsStartingHere = getShiftsStartingAtSlot(mission.id, slot.date, slot.hour, slot.minute);
                           // At 00:00, also include overnight shifts from previous day
                           const overnightShifts = slot.hour === 0 && slot.minute === 0
-                            ? getOvernightShifts(mission.id)
+                            ? getOvernightShifts(mission.id, slot.date)
                             : [];
                           const allShiftsToShow = [...shiftsStartingHere, ...overnightShifts];
 
-                          const shiftsCoveringThisSlot = getShiftsCoveringSlot(mission.id, slot.hour, slot.minute);
+                          const shiftsCoveringThisSlot = getShiftsCoveringSlot(mission.id, slot.date, slot.hour, slot.minute);
                           const hasShifts = shiftsCoveringThisSlot.length > 0;
 
-                          // Check if this slot is covered by a shift that started earlier (continuation)
-                          // For 00:00 with overnight shifts, don't show as continuation since we show the card
-                          const isContinuation = hasShifts && allShiftsToShow.length === 0;
+                          // Get shifts that are continuing through this slot (started earlier, not shown as cards here)
+                          // These need to be shown as continuation markers even if other shifts start at this slot
+                          const allShiftsToShowIds = new Set(allShiftsToShow.map(s => s.id));
+                          const continuingShifts = shiftsCoveringThisSlot.filter(s => !allShiftsToShowIds.has(s.id));
+
+                          const isCurrentDay = slot.date.getTime() === startOfDay(selectedDate).getTime();
 
                           return (
                             <td
-                              key={slot.label}
-                              className="px-1 py-1 border-l border-slate-200 align-top"
+                              key={`cell-${idx}`}
+                              className={clsx(
+                                'px-1 py-1 border-l border-l-slate-200 align-top',
+                                slot.isFirstOfDay && 'border-r-2 border-r-slate-400',
+                                isCurrentDay ? 'bg-blue-50/30' : ''
+                              )}
                             >
                               <div className="min-h-[60px] space-y-1">
                                 {/* Show shifts starting at this slot (or continuing from previous day at 00:00) */}
@@ -388,14 +439,13 @@ export function SchedulePage() {
                                     alerts={alertsByShift.get(shift.id)}
                                     missionId={mission.id}
                                     hour={slot.hour}
-                                    onRemove={handleRemoveShift}
                                     platoonColor={getPlatoonColor(shift.soldierId)}
                                     certificates={getSoldierCertificates(shift.soldierId)}
                                   />
                                 ))}
 
-                                {/* Show continuation markers with soldier names */}
-                                {isContinuation && shiftsCoveringThisSlot.map((shift) => {
+                                {/* Show continuation markers with soldier names for shifts that started earlier */}
+                                {continuingShifts.map((shift) => {
                                   const platoonColor = getPlatoonColor(shift.soldierId);
                                   const certs = getSoldierCertificates(shift.soldierId);
                                   return (
@@ -429,7 +479,7 @@ export function SchedulePage() {
 
                                 {/* Add/Edit button - always visible for multiple assignments */}
                                 <button
-                                  onClick={() => handleCellClick(mission, slot.hour, slot.minute)}
+                                  onClick={() => handleCellClick(mission, slot.date, slot.hour, slot.minute)}
                                   className={clsx(
                                     'w-full flex items-center justify-center rounded transition-colors',
                                     hasShifts
@@ -453,7 +503,7 @@ export function SchedulePage() {
                   ) : (
                     <tr>
                       <td
-                        colSpan={TIME_SLOTS.length + 1}
+                        colSpan={timeSlots.length + 1}
                         className="px-4 py-8 text-center text-slate-500"
                       >
                         {labels.messages.noData}
@@ -639,6 +689,8 @@ export function SchedulePage() {
           missions={missions}
           currentSlotShifts={modalData.currentSlotShifts}
           onAssign={handleAssignSoldiers}
+          onRemove={handleRemoveShift}
+          onTrimShift={handleTrimShift}
           onClose={() => setModalData(null)}
         />
       )}
