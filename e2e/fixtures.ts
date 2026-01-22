@@ -39,11 +39,11 @@ export async function mockAuthState(page: ReturnType<typeof base['page']>) {
 }
 
 /**
- * Test data constants
+ * Test data constants - loaded from environment variables
  */
 export const TEST_DATA = {
-  validEmail: 'test@example.com',
-  validPassword: 'testpassword123',
+  validEmail: process.env.E2E_TEST_EMAIL || 'test@example.com',
+  validPassword: process.env.E2E_TEST_PASSWORD || 'password123',
   invalidEmail: 'invalid@example.com',
   invalidPassword: 'wrongpassword',
 };

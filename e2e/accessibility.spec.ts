@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
 
+// Test credentials from environment variables
+const TEST_EMAIL = process.env.E2E_TEST_EMAIL || 'test@example.com';
+const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD || 'password123';
+
 /**
  * Accessibility tests for Shavtzak
  * Tests basic accessibility requirements
@@ -24,8 +28,8 @@ test.describe('Accessibility', () => {
     await page.goto('/');
 
     // Fill in the form
-    await page.getByLabel('אימייל').fill('test@example.com');
-    await page.getByLabel('סיסמה').fill('password123');
+    await page.getByLabel('אימייל').fill(TEST_EMAIL);
+    await page.getByLabel('סיסמה').fill(TEST_PASSWORD);
 
     // Tab to the button and check it's focused
     await page.keyboard.press('Tab');

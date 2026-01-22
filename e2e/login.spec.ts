@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
 
+// Test credentials from environment variables
+const TEST_EMAIL = process.env.E2E_TEST_EMAIL || 'test@example.com';
+const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD || 'password123';
+
 test.describe('Login Page', () => {
   test.beforeEach(async ({ page }) => {
     // Clear any existing auth state
@@ -37,17 +41,17 @@ test.describe('Login Page', () => {
     const emailInput = page.getByLabel('אימייל');
     const passwordInput = page.getByLabel('סיסמה');
 
-    await emailInput.fill('test@example.com');
-    await passwordInput.fill('password123');
+    await emailInput.fill(TEST_EMAIL);
+    await passwordInput.fill(TEST_PASSWORD);
 
-    await expect(emailInput).toHaveValue('test@example.com');
-    await expect(passwordInput).toHaveValue('password123');
+    await expect(emailInput).toHaveValue(TEST_EMAIL);
+    await expect(passwordInput).toHaveValue(TEST_PASSWORD);
   });
 
   test('should show loading state when submitting', async ({ page }) => {
-    // Fill in credentials
-    await page.getByLabel('אימייל').fill('test@example.com');
-    await page.getByLabel('סיסמה').fill('password123');
+    // Fill in credentials from env
+    await page.getByLabel('אימייל').fill(TEST_EMAIL);
+    await page.getByLabel('סיסמה').fill(TEST_PASSWORD);
 
     // Click login button
     const loginButton = page.getByRole('button', { name: 'התחברות' });
