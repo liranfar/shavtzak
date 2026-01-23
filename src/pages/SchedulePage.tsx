@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { ChevronRight, ChevronLeft, Plus, Pencil, Users, Clock, BarChart3 } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Plus, Pencil, Users, Clock, BarChart3, Upload, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { format, addDays, subDays, setHours, setMinutes, startOfDay, differenceInMinutes, subHours } from 'date-fns';
 import { he } from 'date-fns/locale';
 import {
@@ -20,6 +20,7 @@ import { ShiftAssignmentModal } from '../components/schedule/ShiftAssignmentModa
 import { ShiftCell } from '../components/schedule/ShiftCell';
 import { SoldierDragOverlay } from '../components/schedule/SoldierDragOverlay';
 import { validateDaySchedule } from '../services/validationService';
+import { importShiftsFromCSV, type ImportProgress } from '../services/csvImportService';
 import { labels } from '../utils/translations';
 import { PageLoader } from '../components/ui/LoadingSpinner';
 import type { Mission, Shift } from '../types/entities';
@@ -43,9 +44,17 @@ export function SchedulePage() {
   } | null>(null);
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
   const [distributionTimeframe, setDistributionTimeframe] = useState<24 | 48 | 60 | 72>(72);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importStatus, setImportStatus] = useState<{
+    loading: boolean;
+    progress: ImportProgress | null;
+    result: { created: number; skipped: number; notFoundSoldiers: string[]; notFoundMissions: string[] } | null;
+    error: string | null;
+  }>({ loading: false, progress: null, result: null, error: null });
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const selectedDayRef = useRef<HTMLTableCellElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -337,6 +346,57 @@ export function SchedulePage() {
     }
   };
 
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImportStatus({ loading: true, progress: null, result: null, error: null });
+    setImportModalOpen(true);
+
+    try {
+      const content = await file.text();
+      const result = await importShiftsFromCSV(
+        content,
+        soldiers,
+        missions,
+        shifts,
+        addShift,
+        (progress) => {
+          setImportStatus(prev => ({ ...prev, progress }));
+        }
+      );
+      setImportStatus({
+        loading: false,
+        progress: null,
+        result: {
+          created: result.created,
+          skipped: result.skipped,
+          notFoundSoldiers: result.notFoundSoldiers,
+          notFoundMissions: result.notFoundMissions,
+        },
+        error: result.errors.length > 0 ? result.errors.join('\n') : null,
+      });
+      // Reload shifts after import
+      loadShiftsForDateRange(selectedDate);
+    } catch (error) {
+      setImportStatus({
+        loading: false,
+        progress: null,
+        result: null,
+        error: `שגיאה בייבוא: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
   if (isLoading) {
     return <PageLoader message="טוען לוח משמרות..." />;
   }
@@ -368,6 +428,21 @@ export function SchedulePage() {
               >
                 {labels.time.today}
               </button>
+              <button
+                onClick={handleImportClick}
+                className="flex items-center gap-1.5 px-3 py-1 text-sm bg-green-50 text-green-700 rounded-lg hover:bg-green-100"
+                title="ייבוא משמרות מ-CSV"
+              >
+                <Upload className="w-4 h-4" />
+                ייבוא CSV
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
             </div>
 
             <button
@@ -732,6 +807,122 @@ export function SchedulePage() {
           onTrimShift={handleTrimShift}
           onClose={() => setModalData(null)}
         />
+      )}
+
+      {/* Import Modal */}
+      {importModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">ייבוא משמרות מ-CSV</h3>
+              <button
+                onClick={() => setImportModalOpen(false)}
+                className="p-1 hover:bg-slate-100 rounded"
+              >
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+
+            {importStatus.loading && (
+              <div className="py-6 space-y-4">
+                <div className="text-center text-slate-600">
+                  {importStatus.progress?.phase === 'parsing' ? 'מנתח קובץ CSV...' : 'מייבא משמרות...'}
+                </div>
+                
+                {importStatus.progress && importStatus.progress.phase === 'importing' && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm text-slate-500">
+                      <span>{importStatus.progress.current} / {importStatus.progress.total}</span>
+                      <span>{Math.round((importStatus.progress.current / importStatus.progress.total) * 100)}%</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                      <div
+                        className="bg-blue-600 h-3 rounded-full transition-all duration-150"
+                        style={{ width: `${(importStatus.progress.current / importStatus.progress.total) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+                
+                {(!importStatus.progress || importStatus.progress.phase === 'parsing') && (
+                  <div className="flex justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {importStatus.result && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-green-600">
+                  <CheckCircle className="w-5 h-5" />
+                  <span className="font-medium">הייבוא הושלם!</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-green-50 rounded-lg text-center">
+                    <div className="text-2xl font-bold text-green-700">{importStatus.result.created}</div>
+                    <div className="text-xs text-green-600">משמרות נוצרו</div>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg text-center">
+                    <div className="text-2xl font-bold text-slate-600">{importStatus.result.skipped}</div>
+                    <div className="text-xs text-slate-500">משמרות דולגו (כפילויות)</div>
+                  </div>
+                </div>
+
+                {importStatus.result.notFoundSoldiers.length > 0 && (
+                  <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                    <div className="flex items-center gap-1 text-orange-700 font-medium text-sm mb-2">
+                      <AlertCircle className="w-4 h-4" />
+                      חיילים לא נמצאו ({importStatus.result.notFoundSoldiers.length}):
+                    </div>
+                    <div className="text-xs text-orange-600 max-h-24 overflow-y-auto">
+                      {importStatus.result.notFoundSoldiers.slice(0, 10).join(', ')}
+                      {importStatus.result.notFoundSoldiers.length > 10 && ` ועוד ${importStatus.result.notFoundSoldiers.length - 10}...`}
+                    </div>
+                  </div>
+                )}
+
+                {importStatus.result.notFoundMissions.length > 0 && (
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                    <div className="flex items-center gap-1 text-purple-700 font-medium text-sm mb-2">
+                      <AlertCircle className="w-4 h-4" />
+                      משימות לא נמצאו ({importStatus.result.notFoundMissions.length}):
+                    </div>
+                    <div className="text-xs text-purple-600 max-h-24 overflow-y-auto">
+                      {importStatus.result.notFoundMissions.join(', ')}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setImportModalOpen(false)}
+                  className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  סגור
+                </button>
+              </div>
+            )}
+
+            {importStatus.error && !importStatus.result && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-red-600">
+                  <AlertCircle className="w-5 h-5" />
+                  <span className="font-medium">שגיאה בייבוא</span>
+                </div>
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  {importStatus.error}
+                </div>
+                <button
+                  onClick={() => setImportModalOpen(false)}
+                  className="w-full py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700"
+                >
+                  סגור
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </DndContext>
   );
