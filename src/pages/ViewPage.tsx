@@ -440,7 +440,7 @@ export function ViewPage() {
         <div class="unavailable-grid">
           ${unavailableByReason.map(group => `
             <div class="unavailable-group">
-              <div class="group-header">${group.reason} (${group.soldiers.length})</div>
+              <div class="group-header">${group.status} (${group.soldiers.length})</div>
               <div class="soldiers-list">
                 ${group.soldiers.map(s => `<span class="soldier-badge">${s.name}</span>`).join('')}
               </div>
