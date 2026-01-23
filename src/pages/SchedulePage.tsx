@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { ChevronRight, ChevronLeft, Plus, Pencil, Users, Clock, BarChart3 } from 'lucide-react';
 import { format, addDays, subDays, setHours, setMinutes, startOfDay, differenceInMinutes, subHours } from 'date-fns';
 import { he } from 'date-fns/locale';
@@ -44,6 +44,9 @@ export function SchedulePage() {
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
   const [distributionTimeframe, setDistributionTimeframe] = useState<24 | 48 | 60 | 72>(72);
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const selectedDayRef = useRef<HTMLTableCellElement>(null);
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -61,6 +64,32 @@ export function SchedulePage() {
     loadSoldiers();
     loadShifts();
   }, [loadPlatoons, loadSquads, loadCertificates, loadStatuses, loadMissions, loadSoldiers, loadShifts]);
+
+  // Auto-scroll to selected day when date changes
+  useEffect(() => {
+    if (!isLoading && scrollContainerRef.current) {
+      // Small delay to ensure the table is rendered
+      setTimeout(() => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        
+        // In RTL layout:
+        // - The table shows: previous day (24h) | selected day (24h) | next day (24h)
+        // - Visual order in RTL: right = previous day, middle = selected day, left = next day
+        // - scrollLeft = 0 is the rightmost position (previous day 00:00)
+        // - scrollLeft becomes negative to scroll left towards selected/next day
+        
+        // Each hour cell is 70px (min-w-[70px])
+        // Previous day has 24 hours = 24 * 70 = 1680px
+        // To show selected day at the start, scroll past the previous day
+        const hourWidth = 70;
+        const previousDayWidth = 24 * hourWidth; // 1680px
+        
+        // In RTL, we use negative scrollLeft to scroll left
+        container.scrollLeft = -previousDayWidth;
+      }, 150);
+    }
+  }, [selectedDate, isLoading]);
 
   // Show all missions - don't filter by currentPlatoonId
   const filteredMissions = missions;
@@ -348,28 +377,32 @@ export function SchedulePage() {
         <div className="flex flex-col gap-4">
           {/* Schedule Grid - with inner scrolling */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="max-h-[calc(100vh-380px)] overflow-auto">
+            <div ref={scrollContainerRef} className="max-h-[calc(100vh-380px)] overflow-auto">
               <table className="w-full">
-                <thead>
+                <thead className="sticky top-0 z-20">
                   {/* Day labels row */}
                   <tr className="bg-slate-100 border-b border-slate-300">
                     <th className="sticky right-0 z-10 bg-slate-100 px-3 py-1 text-right text-xs font-semibold text-slate-500 border-l border-slate-300 min-w-[120px]">
                       תאריך
                     </th>
-                    {timeSlots.map((slot, idx) => (
-                      <th
-                        key={`day-${idx}`}
-                        className={clsx(
-                          'px-1 py-1 text-center text-[10px] font-semibold border-l border-l-slate-200 min-w-[70px]',
-                          slot.isFirstOfDay && 'border-r-2 border-r-slate-400',
-                          slot.date.getTime() === startOfDay(selectedDate).getTime()
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'text-slate-500'
-                        )}
-                      >
-                        {slot.isFirstOfDay && slot.dayLabel}
-                      </th>
-                    ))}
+                    {timeSlots.map((slot, idx) => {
+                      const isSelectedDayStart = slot.isFirstOfDay && slot.date.getTime() === startOfDay(selectedDate).getTime();
+                      return (
+                        <th
+                          key={`day-${idx}`}
+                          ref={isSelectedDayStart ? selectedDayRef : undefined}
+                          className={clsx(
+                            'px-1 py-1 text-center text-[10px] font-semibold border-l border-l-slate-200 min-w-[70px]',
+                            slot.isFirstOfDay && 'border-r-2 border-r-slate-400',
+                            slot.date.getTime() === startOfDay(selectedDate).getTime()
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'text-slate-500'
+                          )}
+                        >
+                          {slot.isFirstOfDay && slot.dayLabel}
+                        </th>
+                      );
+                    })}
                   </tr>
                   {/* Time slots row */}
                   <tr className="bg-slate-50">
