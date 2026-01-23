@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import type { Shift, CreateShiftInput, UpdateShiftInput, ShiftStatus } from '../types/entities';
-import { startOfDay, endOfDay, isWithinInterval, areIntervalsOverlapping } from 'date-fns';
+import { startOfDay, endOfDay, isWithinInterval, areIntervalsOverlapping, subDays, addDays } from 'date-fns';
 
 interface ScheduleState {
   shifts: Shift[];
@@ -12,6 +12,7 @@ interface ScheduleState {
   // Actions
   loadShifts: () => Promise<void>;
   loadShiftsForDate: (date: Date) => Promise<void>;
+  loadShiftsForDateRange: (centerDate: Date) => Promise<void>;
   addShift: (input: CreateShiftInput) => Promise<Shift>;
   updateShift: (id: string, input: UpdateShiftInput) => Promise<void>;
   deleteShift: (id: string) => Promise<void>;
@@ -78,6 +79,33 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
         .select('*')
         .gte('start_time', dayStart)
         .lte('start_time', dayEnd);
+
+      if (error) throw error;
+
+      const shifts = (data || []).map(toShift);
+      set({ shifts, isLoading: false });
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false });
+    }
+  },
+
+  loadShiftsForDateRange: async (centerDate: Date) => {
+    set({ isLoading: true, error: null });
+    try {
+      // Load shifts for 3 days: previous, current, and next day
+      // Also include shifts that might have started before but extend into this range
+      const rangeStart = startOfDay(subDays(centerDate, 1));
+      const rangeEnd = endOfDay(addDays(centerDate, 1));
+      
+      // We need shifts where:
+      // 1. start_time is within the range, OR
+      // 2. end_time is within the range (overnight shifts from before)
+      // This is equivalent to: start_time < rangeEnd AND end_time > rangeStart
+      const { data, error } = await supabase
+        .from('shifts')
+        .select('*')
+        .lt('start_time', rangeEnd.toISOString())
+        .gt('end_time', rangeStart.toISOString());
 
       if (error) throw error;
 

@@ -30,7 +30,7 @@ const HOURS_IN_DAY = 24;
 
 export function SchedulePage() {
   const { missions, loadMissions, isLoading: missionsLoading } = useMissionStore();
-  const { shifts, selectedDate, setSelectedDate, loadShifts, addShift, updateShift, deleteShift, isLoading: shiftsLoading } = useScheduleStore();
+  const { shifts, selectedDate, setSelectedDate, loadShiftsForDateRange, addShift, updateShift, deleteShift, isLoading: shiftsLoading } = useScheduleStore();
   const { soldiers, loadSoldiers, isLoading: soldiersLoading } = useSoldierStore();
   const { platoons, loadPlatoons, loadSquads, certificates, loadCertificates, statuses, loadStatuses, isLoading: platoonsLoading } = usePlatoonStore();
 
@@ -55,6 +55,7 @@ export function SchedulePage() {
     })
   );
 
+  // Load static data on mount
   useEffect(() => {
     loadPlatoons();
     loadSquads();
@@ -62,8 +63,13 @@ export function SchedulePage() {
     loadStatuses();
     loadMissions();
     loadSoldiers();
-    loadShifts();
-  }, [loadPlatoons, loadSquads, loadCertificates, loadStatuses, loadMissions, loadSoldiers, loadShifts]);
+  }, [loadPlatoons, loadSquads, loadCertificates, loadStatuses, loadMissions, loadSoldiers]);
+
+  // Load shifts for the selected date range (previous, current, next day)
+  // This runs on mount and whenever selectedDate changes
+  useEffect(() => {
+    loadShiftsForDateRange(selectedDate);
+  }, [selectedDate, loadShiftsForDateRange]);
 
   // Auto-scroll to selected day when date changes
   useEffect(() => {
