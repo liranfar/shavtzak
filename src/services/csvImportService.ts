@@ -22,7 +22,7 @@ const TIME_SLOTS = [
   { label: '14-18', start: 14, end: 18 },
   { label: '18-22', start: 18, end: 22 },
   { label: '22-02', start: 22, end: 2, overnight: true },
-  { label: '02-06', start: 2, end: 6 },
+  { label: '02-06', start: 2, end: 6, nextDay: true },  // This slot is early morning of the next calendar day
 ];
 
 // Values to skip (not actual assignments)
@@ -174,8 +174,8 @@ export function parseCSV(csvContent: string): string[][] {
 
 export function parseShiftsFromCSV(
   csvContent: string,
-  soldiers: Soldier[],
-  missions: Mission[]
+  _soldiers: Soldier[],
+  _missions: Mission[]
 ): { parsedShifts: ParsedShift[]; notFoundSoldiers: Set<string>; notFoundMissions: Set<string> } {
   const rows = parseCSV(csvContent);
   const parsedShifts: ParsedShift[] = [];
@@ -212,7 +212,7 @@ export function parseShiftsFromCSV(
   
   // Parse time slots from row 3
   const timeSlotRow = rows[2];
-  const timeSlots: { start: number; end: number; overnight: boolean; date: Date | null; colIndex: number }[] = [];
+  const timeSlots: { start: number; end: number; overnight: boolean; nextDay: boolean; date: Date | null; colIndex: number }[] = [];
   
   for (let i = 2; i < timeSlotRow.length; i++) {
     const cell = timeSlotRow[i];
@@ -222,6 +222,7 @@ export function parseShiftsFromCSV(
         start: slot.start,
         end: slot.end,
         overnight: slot.overnight || false,
+        nextDay: (slot as { nextDay?: boolean }).nextDay || false,
         date: columnToDate.get(i) || null,
         colIndex: i
       });
@@ -268,11 +269,15 @@ export function parseShiftsFromCSV(
       
       // Create start and end times
       const startTime = new Date(slotInfo.date);
+      if (slotInfo.nextDay) {
+        // 02-06 slot is early morning of the next calendar day
+        startTime.setDate(startTime.getDate() + 1);
+      }
       startTime.setHours(slotInfo.start, 0, 0, 0);
       
       const endTime = new Date(slotInfo.date);
-      if (slotInfo.overnight) {
-        // End time is next day
+      if (slotInfo.overnight || slotInfo.nextDay) {
+        // End time is next day (for overnight slots like 22-02, or for nextDay slots like 02-06)
         endTime.setDate(endTime.getDate() + 1);
       }
       endTime.setHours(slotInfo.end, 0, 0, 0);
