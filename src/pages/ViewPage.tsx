@@ -70,19 +70,38 @@ export function ViewPage() {
     });
   }, [shifts, selectedDate]);
 
-  // Group shifts by time slot (start time rounded to hour)
+  // Group shifts by time slot - for each start time, show all soldiers active at that time
   const shiftsByTimeSlot = useMemo(() => {
-    const grouped = new Map<string, typeof shiftsForDay>();
-
+    const dayStart = startOfDay(selectedDate);
+    
+    // First, collect all unique start times
+    const startTimes = new Set<string>();
+    
     for (const shift of shiftsForDay) {
-      const startTime = new Date(shift.startTime);
-      // Round to the hour for grouping
-      const timeKey = format(startTime, 'HH:00');
+      const shiftStart = new Date(shift.startTime);
+      const effectiveStart = shiftStart < dayStart ? dayStart : shiftStart;
+      const timeKey = format(effectiveStart, 'HH:mm');
+      startTimes.add(timeKey);
+    }
 
-      if (!grouped.has(timeKey)) {
-        grouped.set(timeKey, []);
+    // For each start time, find ALL soldiers who are active at that time
+    const grouped = new Map<string, typeof shiftsForDay>();
+    
+    for (const timeKey of startTimes) {
+      const [hours, minutes] = timeKey.split(':').map(Number);
+      const slotTime = new Date(dayStart);
+      slotTime.setHours(hours, minutes, 0, 0);
+      
+      // Find all shifts that are ACTIVE during this time slot
+      const activeShifts = shiftsForDay.filter(shift => {
+        const shiftStart = new Date(shift.startTime);
+        const shiftEnd = new Date(shift.endTime);
+        return shiftStart <= slotTime && shiftEnd > slotTime;
+      });
+      
+      if (activeShifts.length > 0) {
+        grouped.set(timeKey, activeShifts);
       }
-      grouped.get(timeKey)!.push(shift);
     }
 
     // Sort each group by mission name then soldier name
@@ -98,30 +117,56 @@ export function ViewPage() {
     return Array.from(grouped.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([time, shifts]) => ({ time, shifts }));
-  }, [shiftsForDay, missions, soldiers]);
+  }, [shiftsForDay, missions, soldiers, selectedDate]);
 
   // Group shifts by mission AND time slot (Mission → TimeSlot → Soldiers)
+  // For each start time that exists, show ALL soldiers who are active during that time
   // Also calculate uncovered time ranges for each mission
   const shiftsByMissionAndTime = useMemo(() => {
     const dayStart = startOfDay(selectedDate);
     const dayEnd = addDays(dayStart, 1);
     
-    const grouped = new Map<string, Map<string, typeof shiftsForDay>>();
-
+    // First, collect all unique start times per mission
+    const startTimesByMission = new Map<string, Set<string>>();
+    
     for (const shift of shiftsForDay) {
-      const startTime = new Date(shift.startTime);
-      const timeKey = format(startTime, 'HH:mm');
+      const shiftStart = new Date(shift.startTime);
+      const effectiveStart = shiftStart < dayStart ? dayStart : shiftStart;
+      const timeKey = format(effectiveStart, 'HH:mm');
       const missionId = shift.missionId;
 
-      if (!grouped.has(missionId)) {
-        grouped.set(missionId, new Map());
+      if (!startTimesByMission.has(missionId)) {
+        startTimesByMission.set(missionId, new Set());
       }
-      const timeMap = grouped.get(missionId)!;
+      startTimesByMission.get(missionId)!.add(timeKey);
+    }
 
-      if (!timeMap.has(timeKey)) {
-        timeMap.set(timeKey, []);
+    // Now for each start time, find ALL soldiers who are active at that time
+    const grouped = new Map<string, Map<string, typeof shiftsForDay>>();
+
+    for (const [missionId, startTimes] of startTimesByMission) {
+      const missionShifts = shiftsForDay.filter(s => s.missionId === missionId);
+      const timeMap = new Map<string, typeof shiftsForDay>();
+      
+      for (const timeKey of startTimes) {
+        const [hours, minutes] = timeKey.split(':').map(Number);
+        const slotTime = new Date(dayStart);
+        slotTime.setHours(hours, minutes, 0, 0);
+        
+        // Find all shifts that are ACTIVE during this time slot
+        const activeShifts = missionShifts.filter(shift => {
+          const shiftStart = new Date(shift.startTime);
+          const shiftEnd = new Date(shift.endTime);
+          // Shift is active if it starts before or at slotTime AND ends after slotTime
+          return shiftStart <= slotTime && shiftEnd > slotTime;
+        });
+        
+        if (activeShifts.length > 0) {
+          timeMap.set(timeKey, activeShifts);
+        }
       }
-      timeMap.get(timeKey)!.push(shift);
+      
+      grouped.set(missionId, timeMap);
     }
 
     // Sort soldiers within each time slot
@@ -460,72 +505,72 @@ export function ViewPage() {
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-            padding: 24px;
+            padding: 8px 12px;
             direction: rtl;
-            font-size: 11px;
+            font-size: 8px;
             background: #f8fafc;
             color: #1e293b;
           }
           .header {
             text-align: center;
-            margin-bottom: 24px;
-            padding-bottom: 16px;
-            border-bottom: 2px solid #e2e8f0;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #e2e8f0;
           }
           .header h1 {
-            font-size: 22px;
+            font-size: 14px;
             font-weight: 700;
             color: #0f172a;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
           }
           .header .date {
-            font-size: 14px;
+            font-size: 10px;
             color: #64748b;
           }
           .header .stats {
-            margin-top: 8px;
-            font-size: 12px;
+            margin-top: 2px;
+            font-size: 9px;
             color: #3b82f6;
             font-weight: 500;
           }
           .missions-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
-            margin-bottom: 24px;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 5px;
+            margin-bottom: 8px;
           }
           .mission-card {
             background: white;
             border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 12px;
+            border-radius: 6px;
+            padding: 6px;
             break-inside: avoid;
           }
           .mission-header {
             font-weight: 600;
-            font-size: 13px;
-            margin-bottom: 10px;
-            padding-bottom: 8px;
+            font-size: 9px;
+            margin-bottom: 4px;
+            padding-bottom: 3px;
             border-bottom: 1px solid #e2e8f0;
           }
           .mission-name { color: #0f172a; }
-          .shift-count { color: #64748b; font-weight: 400; margin-right: 6px; font-size: 11px; }
+          .shift-count { color: #64748b; font-weight: 400; margin-right: 4px; font-size: 8px; }
           
           .warning-box {
-            padding: 8px;
-            border-radius: 8px;
-            margin-bottom: 10px;
+            padding: 3px 4px;
+            border-radius: 4px;
+            margin-bottom: 4px;
           }
           .warning-orange { background: #fff7ed; border: 1px solid #fed7aa; }
-          .warning-purple { background: #faf5ff; border: 1px solid #e9d5ff; margin-top: 10px; }
-          .warning-header { font-size: 10px; font-weight: 600; margin-bottom: 4px; }
+          .warning-purple { background: #faf5ff; border: 1px solid #e9d5ff; margin-top: 4px; }
+          .warning-header { font-size: 7px; font-weight: 600; margin-bottom: 2px; }
           .warning-orange .warning-header { color: #c2410c; }
           .warning-purple .warning-header { color: #7c3aed; }
-          .warning-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+          .warning-badges { display: flex; flex-wrap: wrap; gap: 2px; }
           .badge {
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 10px;
+            padding: 1px 3px;
+            border-radius: 2px;
+            font-size: 7px;
             font-weight: 500;
           }
           .badge-orange { background: #ffedd5; color: #9a3412; }
@@ -533,84 +578,84 @@ export function ViewPage() {
           
           .time-slots { }
           .time-slot {
-            margin-bottom: 10px;
-            padding-right: 8px;
-            border-right: 2px solid #3b82f6;
+            margin-bottom: 4px;
+            padding-right: 4px;
+            border-right: 1px solid #3b82f6;
           }
           .time-header {
-            font-size: 11px;
+            font-size: 8px;
             font-weight: 600;
             color: #1d4ed8;
-            margin-bottom: 6px;
+            margin-bottom: 2px;
           }
-          .shifts-list { display: flex; flex-direction: column; gap: 4px; }
+          .shifts-list { display: flex; flex-direction: column; gap: 2px; }
           .shift-card {
             display: flex;
             align-items: center;
-            gap: 6px;
-            padding: 6px 8px;
-            border-radius: 6px;
+            gap: 3px;
+            padding: 2px 4px;
+            border-radius: 3px;
             border: 1px solid;
           }
           .color-dot {
-            width: 8px;
-            height: 8px;
+            width: 5px;
+            height: 5px;
             border-radius: 50%;
             flex-shrink: 0;
           }
           .shift-info { flex: 1; }
-          .soldier-name { font-weight: 500; }
-          .platoon-name { color: #64748b; margin-right: 4px; }
-          .shift-time { color: #94a3b8; font-size: 10px; }
+          .soldier-name { font-weight: 500; font-size: 8px; }
+          .platoon-name { color: #64748b; margin-right: 2px; font-size: 7px; }
+          .shift-time { color: #94a3b8; font-size: 7px; }
           
           .section {
             background: white;
             border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 16px;
+            border-radius: 6px;
+            padding: 6px;
+            margin-bottom: 6px;
           }
           .section-title {
-            font-size: 13px;
+            font-size: 9px;
             font-weight: 600;
             color: #0f172a;
-            margin-bottom: 12px;
+            margin-bottom: 4px;
           }
           .unavailable-section { border-color: #fecaca; background: #fef2f2; }
-          .unavailable-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+          .unavailable-grid { display: flex; flex-wrap: wrap; gap: 6px; }
           .unavailable-group { }
-          .group-header { font-size: 11px; font-weight: 600; color: #991b1b; margin-bottom: 4px; }
-          .soldiers-list { display: flex; flex-wrap: wrap; gap: 4px; }
+          .group-header { font-size: 8px; font-weight: 600; color: #991b1b; margin-bottom: 2px; }
+          .soldiers-list { display: flex; flex-wrap: wrap; gap: 2px; }
           .soldier-badge { 
-            padding: 2px 8px; 
+            padding: 1px 4px; 
             background: #fee2e2; 
             color: #b91c1c; 
-            border-radius: 4px; 
-            font-size: 10px; 
+            border-radius: 2px; 
+            font-size: 7px; 
           }
           
           .footer {
             text-align: center;
             color: #94a3b8;
-            font-size: 10px;
-            padding-top: 16px;
+            font-size: 7px;
+            padding-top: 6px;
             border-top: 1px solid #e2e8f0;
           }
           
           @media print {
             body { 
-              padding: 12px; 
+              padding: 6px 10px; 
               background: white;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
-            .missions-grid { grid-template-columns: repeat(3, 1fr); }
+            .missions-grid { grid-template-columns: repeat(5, 1fr); }
             .mission-card { break-inside: avoid; }
           }
           
           @page {
             size: A4 landscape;
-            margin: 10mm;
+            margin: 5mm;
           }
         </style>
       </head>
